@@ -46,7 +46,7 @@ SELECT
     status AS status 
 FROM ATLAN_CONTEXT_STORE."entity_metadata".CustommetadataRelationship;
 
-CREATE OR REPLACE VIEW ATLAN_GOLD.PUBLIC.data_mesh_details
+CREATE OR REPLACE VIEW ATLAN_GOLD.PUBLIC.DATA_MESH_DETAILS
 (
     guid COMMENT 'The asset’s globally-unique identifier',
     asset_type COMMENT 'Type of Data Mesh asset. Supported values: DataDomain, DataProduct',
