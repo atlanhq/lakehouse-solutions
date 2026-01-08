@@ -46,6 +46,62 @@ SELECT
     status AS status 
 FROM ATLAN_CONTEXT_STORE."entity_metadata".CustommetadataRelationship;
 
+CREATE OR REPLACE VIEW ATLAN_GOLD.PUBLIC.data_mesh_details
+(
+    guid COMMENT 'The asset’s globally-unique identifier',
+    asset_type COMMENT 'Type of Data Mesh asset. Supported values: DataDomain, DataProduct',
+    data_products COMMENT 'List of GUIDs for data products that exist within this data domain',
+    parent_domain COMMENT 'GUID of the parent data domain in which this sub-data domain exists',
+    stakeholders COMMENT 'List of GUIDs of stakeholders assigned to the data domain',
+    subdomains COMMENT 'List of GUIDs of sub-data domains that exist within this data domain',
+    data_product_status COMMENT 'Status of the data product (DAAPSTATUS)',
+    criticality COMMENT 'Criticality of the data product (DAAPCRITICALITY)',
+    sensitivity COMMENT 'Sensitivity of the data product (DAAPSENSITIVITY)',
+    visibility COMMENT 'Visibility of the data product (DAAPVISIBILITY)',
+    input_port_guids COMMENT 'List of GUIDs for input ports of the data product (DAAPINPUTPORTGUIDS)',
+    output_port_guids COMMENT 'List of GUIDs for output ports of the data product (DAAPOUTPUTPORTGUIDS)',
+    data_domain COMMENT 'GUID of the data domain in which this data product exists (DATADOMAIN)',
+    assets_dsl COMMENT 'Search DSL used to define which assets are part of this data product (DATAPRODUCTASSETSDSL)',
+    assets_playbook_filter COMMENT 'Playbook filter used to define which assets are part of this data product (DATAPRODUCTASSETSFILTER)'
+)
+COMMENT = 'Gold layer view providing Data Mesh details. This view consolidates metadata for DataDomain and DataProduct typedefs under the Data Mesh supertype.'
+AS
+SELECT
+    guid                 AS guid,
+    typename             AS asset_type,
+    dataproducts         AS data_products,
+    parentdomain         AS parent_domain,
+    stakeholders         AS stakeholders,
+    subdomains           AS subdomains,
+    NULL                 AS data_product_status,
+    NULL                 AS criticality,
+    NULL                 AS sensitivity,
+    NULL                 AS visibility,
+    NULL                 AS input_port_guids,
+    NULL                 AS output_port_guids,
+    NULL                 AS data_domain,
+    NULL                 AS assets_dsl,
+    NULL                 AS assets_playbook_filter
+FROM ATLAN_CONTEXT_STORE."entity_metadata".DataDomain
+UNION ALL
+SELECT
+    guid                     AS guid,
+    typename                 AS asset_type,
+    NULL                     AS data_products,
+    NULL                     AS parent_domain,
+    NULL                     AS stakeholders,
+    NULL                     AS subdomains,
+    daapstatus               AS data_product_status,
+    daapcriticality          AS criticality,
+    daapsensitivity          AS sensitivity,
+    daapvisibility           AS visibility,
+    daapinputportguids       AS input_port_guids,
+    daapoutputportguids      AS output_port_guids,
+    datadomain               AS data_domain,
+    dataproductassetsdsl     AS assets_dsl,
+    dataProductAssetsPlaybookFilter  AS assets_playbook_filter
+FROM ATLAN_CONTEXT_STORE."entity_metadata".DataProduct;
+
 CREATE OR REPLACE VIEW ATLAN_GOLD.PUBLIC.GLOSSARY_DETAILS (
     guid COMMENT 'The asset’s globally-unique identifier',
     asset_type COMMENT 'E.g., Glossary, GlossaryTerm',
