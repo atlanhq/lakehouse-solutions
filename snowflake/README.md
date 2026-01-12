@@ -97,7 +97,9 @@ PIPELINE_DETAILS
 
 LINEAGE
 - Recursive view providing complete multi-hop upstream and downstream lineage
-
+  
+DATA_MESH_DETAILS
+- Consolidates metadata for DataDomain and DataProduct typedefs under the Data Mesh supertype.
 ------------------------------------------------------------
 
 INTERNAL LINEAGE OBJECTS (DO NOT USE)
