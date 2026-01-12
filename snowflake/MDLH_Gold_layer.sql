@@ -528,7 +528,7 @@ SELECT
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, columns, columncount,
-    queries, viewerUsers, rowcount, sizebytes, sourceReadCount, NULL, NULL, NULL, NULL, NULL
+    queries, sourcereadrecentuserlist, rowcount, sizebytes, sourceReadCount, NULL, NULL, NULL, NULL, NULL
 FROM ATLAN_CONTEXT_STORE."entity_metadata"."Table"
 UNION ALL
 SELECT
@@ -536,12 +536,12 @@ SELECT
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, columns, definition, queries, viewerUsers, sourceReadCount
+    NULL, NULL, NULL, NULL, NULL, columns, definition, queries, sourcereadrecentuserlist, sourceReadCount
 FROM ATLAN_CONTEXT_STORE."entity_metadata".View
 UNION ALL
 SELECT
     guid, typename,
-    datatype, isnullable, queries, viewerUsers, tablename, sourceReadCount, viewname, NULL,
+    datatype, isnullable, queries, sourcereadrecentuserlist, tablename, sourceReadCount, viewname, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
