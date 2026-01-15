@@ -104,6 +104,169 @@ SELECT
     dataProductAssetsPlaybookFilter  AS assets_playbook_filter
 FROM dataproduct_entity;
 
+CREATE OR REPLACE VIEW ATLAN.ATLAN_GOLD.LINEAGE_PROCESSES (
+    guid COMMENT 'The asset’s globally-unique identifier',
+    type_name COMMENT 'The asset’s type (e.g., process, biprocess, columnprocess, dbtprocess, dbtcolumnprocess)',
+    name COMMENT 'The asset’s name',
+    qualified_name COMMENT 'The asset’s fully-qualified unique name',
+    description COMMENT 'The asset’s description',
+    status COMMENT 'The asset’s status (e.g., active, archived)',
+    created_time COMMENT 'The time (epoch, milliseconds) at which the asset was created',
+    updated_time COMMENT 'The time (epoch, milliseconds) at which the asset was last updated',
+    created_by COMMENT 'The user or account that created the asset',
+    updated_by COMMENT 'The user or account that last updated the asset',
+    certificate_status COMMENT 'Certification status indicating trust or validation level of the process',
+    connector_name COMMENT 'The type of connector through which this asset is accessible',
+    connector_qualified_name COMMENT 'The unique, fully-qualified name of the connection through which this asset is accessible',
+    connection_name COMMENT 'The name of the connection through which this asset is accessible',
+    popularity_score COMMENT 'Popularity score representing usage or importance of the process',
+    owner_users COMMENT 'List of users who own this asset',
+    has_lineage COMMENT 'Indicates whether lineage information is available for this process',
+    sql COMMENT 'The SQL transformation logic for this process',
+    ast COMMENT 'Abstract Syntax Tree (AST) representation of the SQL or transformation logic',
+    code COMMENT 'Non-SQL transformation code associated with the process',
+    additional_etl_context COMMENT 'Additional ETL or execution context metadata for the process',
+    inputs COMMENT 'List of GUIDs that this process takes as input',
+    outputs COMMENT 'List of GUIDs that this process produces as output',
+    process COMMENT 'The parent process associated with this asset (used primarily for column-level lineage)'
+)
+COMMENT 'Information about asset-level and column-level lineage processes in Atlan'
+AS
+SELECT
+    guid,
+    typename AS type_name,
+    name,
+    qualifiedname AS qualified_name,
+    COALESCE(userdescription, description) AS description,
+    status,
+    createtime AS created_time,
+    updatetime AS updated_time,
+    createdby AS created_by,
+    updatedby AS updated_by,
+    certificatestatus AS certificate_status,
+    connectorname AS connector_name,
+    connectionqualifiedname AS connector_qualified_name,
+    connectionname AS connection_name,
+    popularityscore AS popularity_score,
+    ownerusers AS owner_users,
+    haslineage AS has_lineage,
+    sql,
+    ast,
+    code,
+    additionalEtlContext AS additional_etl_context,
+    inputs,
+    outputs,
+    NULL AS process
+FROM process_entity
+UNION ALL
+SELECT
+    guid,
+    typename AS type_name,
+    name,
+    qualifiedname AS qualified_name,
+    COALESCE(userdescription, description),
+    status,
+    createtime,
+    updatetime,
+    createdby,
+    updatedby,
+    certificatestatus,
+    connectorname,
+    connectionqualifiedname,
+    connectionname,
+    popularityscore,
+    ownerusers,
+    haslineage,
+    sql,
+    ast,
+    code,
+    additionalEtlContext,
+    inputs,
+    outputs,
+    NULL AS process
+FROM biprocess_entity
+UNION ALL
+SELECT
+    guid,
+    typename AS type_name,
+    name,
+    qualifiedname AS qualified_name,
+    COALESCE(userdescription, description),
+    status,
+    createtime,
+    updatetime,
+    createdby,
+    updatedby,
+    certificatestatus,
+    connectorname,
+    connectionqualifiedname,
+    connectionname,
+    popularityscore,
+    ownerusers,
+    haslineage,
+    sql,
+    ast,
+    code,
+    additionalEtlContext,
+    inputs,
+    outputs,
+    NULL AS process
+FROM columnprocess_entity
+UNION ALL
+SELECT
+    guid,
+    typename AS type_name,
+    name,
+    qualifiedname AS qualified_name,
+    COALESCE(userdescription, description),
+    status,
+    createtime,
+    updatetime,
+    createdby,
+    updatedby,
+    certificatestatus,
+    connectorname,
+    connectionqualifiedname,
+    connectionname,
+    popularityscore,
+    ownerusers,
+    haslineage,
+    sql,
+    ast,
+    code,
+    additionalEtlContext,
+    inputs,
+    outputs,
+    NULL AS process
+FROM dbtprocess_entity
+UNION ALL
+SELECT
+    guid,
+    typename AS type_name,
+    name,
+    qualifiedname AS qualified_name,
+    COALESCE(userdescription, description),
+    status,
+    createtime,
+    updatetime,
+    createdby,
+    updatedby,
+    certificatestatus,
+    connectorname,
+    connectionqualifiedname,
+    connectionname,
+    popularityscore,
+    ownerusers,
+    haslineage,
+    sql,
+    ast,
+    code,
+    additionalEtlContext,
+    inputs,
+    outputs,
+    process
+FROM dbtcolumnprocess_entity;
+
 CREATE OR REPLACE VIEW ATLAN.ATLAN_GOLD.GLOSSARY_DETAILS (
     guid COMMENT 'The asset’s globally-unique identifier',
     asset_type COMMENT 'E.g., Glossary, GlossaryTerm',
@@ -151,7 +314,7 @@ SELECT
     NULL AS assigned_entities,
     CAST(get(readme, 0) AS STRING) AS readme_guid,
     NULL AS anchor_guid
-FROM GLOSSARY_entity
+FROM Glossary_entity
 UNION ALL
 SELECT
     guid AS guid,
