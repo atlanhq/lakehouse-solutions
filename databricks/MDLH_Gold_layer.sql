@@ -99,7 +99,7 @@ SELECT
     daapvisibility           AS visibility,
     daapinputportguids       AS input_port_guids,
     daapoutputportguids      AS output_port_guids,
-    datadomain               AS data_domain,
+    CAST(get(datadomain, 0) AS STRING) AS data_domain,
     dataproductassetsdsl     AS assets_dsl,
     dataProductAssetsPlaybookFilter  AS assets_playbook_filter
 FROM dataproduct_entity;
