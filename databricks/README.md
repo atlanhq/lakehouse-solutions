@@ -123,8 +123,20 @@ Examples:
 ### LINEAGE
 - Recursive view providing complete multi-hop upstream and downstream lineage
 
-------------------------------------------------------------
 
+INTERNAL LINEAGE OBJECTS (DO NOT USE)
+------------------------------------
+
+The following objects are created only to improve lineage performance.
+They are used internally by the LINEAGE view and should not be queried directly.
+
+LINEAGE_EDGES
+- Internal view for lineage derivation across multiple process types
+
+BASE_EDGES
+- Internal table used to flatten and resolve lineage edges
+
+------------------------------------------------------------
 ## EXECUTION STEPS
 
 ### Step 1: Execute the SQL Script
