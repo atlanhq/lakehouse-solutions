@@ -97,7 +97,7 @@ SELECT
     daapvisibility           AS visibility,
     daapinputportguids       AS input_port_guids,
     daapoutputportguids      AS output_port_guids,
-    datadomain               AS data_domain,
+    datadomain[0]::VARCHAR   AS data_domain,
     dataproductassetsdsl     AS assets_dsl,
     dataProductAssetsPlaybookFilter  AS assets_playbook_filter
 FROM ATLAN_CONTEXT_STORE."entity_metadata".DataProduct;
