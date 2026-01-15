@@ -1,6 +1,3 @@
-
-
-
 -- Create target dataset for Gold Layer
 CREATE SCHEMA IF NOT EXISTS ATLAN_GOLD;
 
@@ -25,7 +22,6 @@ SELECT
     tagconnectorname AS tag_connector_name,
     propagate AS propagate
 FROM `development-platform-370010.atlan_wh_us_east_1.Tag_Relationship`;
-
 
 CREATE OR REPLACE VIEW ATLAN_GOLD.CUSTOM_METADATA 
 (
@@ -466,7 +462,6 @@ SELECT
     outputfromprocesses AS output_guids_from_processes
 FROM `development-platform-370010.atlan_wh_us_east_1.MatillionProject_entity`;
 
-
 CREATE OR REPLACE VIEW ATLAN_GOLD.RELATIONAL_ASSET_DETAILS (
     guid OPTIONS(description='The asset’s globally-unique identifier'),
     asset_type OPTIONS(description='The type of asset'),
@@ -663,8 +658,6 @@ SELECT
     updatedby AS updated_by
 FROM `development-platform-370010.atlan_wh_us_east_1.Readme_entity`;
 
-
-
 CREATE OR REPLACE VIEW ATLAN_GOLD.ASSETS_PART1
 AS
 SELECT asset.guid AS guid, asset.typename AS asset_type, asset.name AS asset_name, asset.qualifiedname AS asset_qualified_name, COALESCE(asset.userdescription, asset.description) AS description, CAST(readme[SAFE_OFFSET(0)] AS STRING) AS readme_guid, asset.status AS status, asset.createtime AS created_at,asset.createdby AS created_by, asset.updatetime AS updated_at, asset.updatedby AS updated_by, asset.certificatestatus AS certificate_status, asset.certificateupdatedby AS certificate_updated_by, asset.certificateupdatedat AS certificate_updated_at, asset.connectorname AS connector_name, asset.connectionqualifiedname AS connector_qualified_name,asset.sourcecreatedat AS source_created_at, asset.sourcecreatedby AS source_created_by, asset.sourceupdatedat AS source_updated_at, asset.sourceupdatedby AS source_updated_by, asset.ownerusers AS owner_users, asset.meanings AS term_guids,  asset.popularityscore AS popularity_score, asset.haslineage AS has_lineage FROM `development-platform-370010.atlan_wh_us_east_1.ADF_entity` asset UNION ALL
@@ -787,10 +780,6 @@ SELECT asset.guid AS guid, asset.typename AS asset_type, asset.name AS asset_nam
 SELECT asset.guid AS guid, asset.typename AS asset_type, asset.name AS asset_name, asset.qualifiedname AS asset_qualified_name, COALESCE(asset.userdescription, asset.description) AS description, CAST(readme[SAFE_OFFSET(0)] AS STRING) AS readme_guid, asset.status AS status, asset.createtime AS created_at,asset.createdby AS created_by, asset.updatetime AS updated_at, asset.updatedby AS updated_by, asset.certificatestatus AS certificate_status, asset.certificateupdatedby AS certificate_updated_by, asset.certificateupdatedat AS certificate_updated_at, asset.connectorname AS connector_name, asset.connectionqualifiedname AS connector_qualified_name,asset.sourcecreatedat AS source_created_at, asset.sourcecreatedby AS source_created_by, asset.sourceupdatedat AS source_updated_at, asset.sourceupdatedby AS source_updated_by, asset.ownerusers AS owner_users, asset.meanings AS term_guids,  asset.popularityscore AS popularity_score, asset.haslineage AS has_lineage FROM `development-platform-370010.atlan_wh_us_east_1.Databricks_entity` asset UNION ALL
 SELECT asset.guid AS guid, asset.typename AS asset_type, asset.name AS asset_name, asset.qualifiedname AS asset_qualified_name, COALESCE(asset.userdescription, asset.description) AS description, CAST(readme[SAFE_OFFSET(0)] AS STRING) AS readme_guid, asset.status AS status, asset.createtime AS created_at,asset.createdby AS created_by, asset.updatetime AS updated_at, asset.updatedby AS updated_by, asset.certificatestatus AS certificate_status, asset.certificateupdatedby AS certificate_updated_by, asset.certificateupdatedat AS certificate_updated_at, asset.connectorname AS connector_name, asset.connectionqualifiedname AS connector_qualified_name,asset.sourcecreatedat AS source_created_at, asset.sourcecreatedby AS source_created_by, asset.sourceupdatedat AS source_updated_at, asset.sourceupdatedby AS source_updated_by, asset.ownerusers AS owner_users, asset.meanings AS term_guids,  asset.popularityscore AS popularity_score, asset.haslineage AS has_lineage FROM `development-platform-370010.atlan_wh_us_east_1.DatabricksAIModelContext_entity` asset UNION ALL
 SELECT asset.guid AS guid, asset.typename AS asset_type, asset.name AS asset_name, asset.qualifiedname AS asset_qualified_name, COALESCE(asset.userdescription, asset.description) AS description, CAST(readme[SAFE_OFFSET(0)] AS STRING) AS readme_guid, asset.status AS status, asset.createtime AS created_at,asset.createdby AS created_by, asset.updatetime AS updated_at, asset.updatedby AS updated_by, asset.certificatestatus AS certificate_status, asset.certificateupdatedby AS certificate_updated_by, asset.certificateupdatedat AS certificate_updated_at, asset.connectorname AS connector_name, asset.connectionqualifiedname AS connector_qualified_name,asset.sourcecreatedat AS source_created_at, asset.sourcecreatedby AS source_created_by, asset.sourceupdatedat AS source_updated_at, asset.sourceupdatedby AS source_updated_by, asset.ownerusers AS owner_users, asset.meanings AS term_guids,  asset.popularityscore AS popularity_score, asset.haslineage AS has_lineage FROM `development-platform-370010.atlan_wh_us_east_1.DatabricksAIModelVersion_entity` asset ;
-
-
-
-
 
 CREATE OR REPLACE VIEW ATLAN_GOLD.ASSETS_PART2
 AS
@@ -1109,9 +1098,6 @@ SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_g
 SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART2 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid UNION ALL
 SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART3 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid ;
 
-
-
-
 CREATE OR REPLACE VIEW ATLAN_GOLD.LINEAGE_EDGES (
     process_guid OPTIONS(description='The globally-unique identifier of the process that connects the input and output assets'),
     input_guid OPTIONS(description='The globally-unique identifier of the upstream (source) asset'),
@@ -1172,7 +1158,6 @@ FROM `development-platform-370010.atlan_wh_us_east_1.DbtColumnProcess_entity` p,
      UNNEST(p.inputs) AS f,
      UNNEST(p.outputs) AS o
 WHERE p.status = 'ACTIVE';
-
 
 CREATE OR REPLACE TABLE ATLAN_GOLD.BASE_EDGES 
 OPTIONS(description='Internal table used for flattening lineage edges by resolving GUIDs to human-readable names and types from the asset registry')
