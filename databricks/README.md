@@ -105,6 +105,9 @@ Examples:
 ### TAGS
 - Information about tagged assets in Atlan, including classifications and propagation
 
+### LINEAGE_PROCESSES
+- Information about asset and column-level lineage processes in Atlan
+
 ### CUSTOM_METADATA
 - Custom metadata attributes defined and applied within Atlan
 
