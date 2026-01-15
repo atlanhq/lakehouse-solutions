@@ -132,7 +132,8 @@ LINEAGE_EDGES
 
 BASE_EDGES
 - Internal table used to flatten and resolve lineage edges
-- 
+------------------------------------------------------------
+
 ## EXECUTION STEPS
 
 ### Step 1: Update Source Table References
