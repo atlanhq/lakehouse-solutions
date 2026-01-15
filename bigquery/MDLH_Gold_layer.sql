@@ -96,7 +96,7 @@ SELECT
     daapvisibility           AS visibility,
     daapinputportguids       AS input_port_guids,
     daapoutputportguids      AS output_port_guids,
-    datadomain               AS data_domain,
+    CAST(datadomain[SAFE_OFFSET(0)] AS STRING) AS parent_domain,
     dataproductassetsdsl     AS assets_dsl,
     dataProductAssetsPlaybookFilter  AS assets_playbook_filter
 FROM `development-platform-370010.atlan_wh_us_east_1.DataProduct_entity`;
