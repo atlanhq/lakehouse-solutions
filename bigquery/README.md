@@ -66,7 +66,7 @@ All views and tables created by this script will be available under:
 Examples:
 - `ATLAN_GOLD.TAGS`
 - `ATLAN_GOLD.ASSETS`
-- `ATLAN_GOLD.BASE_EDGES`
+- `ATLAN_GOLD.RELATIONAL_ASSET_DETAILS`
 - `ATLAN_GOLD.LINEAGE`
 
 ------------------------------------------------------------
@@ -119,11 +119,20 @@ These intermediate views are created to work around BigQuery's 256KB SQL stateme
 ### LINEAGE
 - Recursive view providing complete multi-hop upstream and downstream lineage
 
-### LINEAGE_EDGES (Internal View)
-- Internal view used to derive the lineage across various process types including standard, BI, column, and DBT processes
-
 ------------------------------------------------------------
 
+INTERNAL LINEAGE OBJECTS (DO NOT USE)
+------------------------------------
+
+The following objects are created only to improve lineage performance.
+They are used internally by the LINEAGE view and should not be queried directly.
+
+LINEAGE_EDGES
+- Internal view for lineage derivation across multiple process types
+
+BASE_EDGES
+- Internal table used to flatten and resolve lineage edges
+- 
 ## EXECUTION STEPS
 
 ### Step 1: Update Source Table References
