@@ -70,7 +70,7 @@ SELECT
     guid                 AS guid,
     typename             AS asset_type,
     dataproducts         AS data_products,
-    parentdomain         AS parent_domain,
+    parentdomain[0]::VARCHAR AS parent_domain,
     stakeholders         AS stakeholders,
     subdomains           AS subdomains,
     NULL                 AS data_product_status,
