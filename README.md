@@ -2,16 +2,15 @@
 
 ## Overview
 
-This repository provides the **Gold layer** implementation for the Metadata Lakehouse architecture, enabling Atlan customers to deploy standardized, production-ready analytical models on their own compute environments.
+This repository provides the **Gold layer** implementation for the Atlan Lakehouse architecture, enabling Atlan customers to deploy standardized, production-ready analytical models on their own compute environments.
 
-The Gold layer serves as the single entry point for both human and AI consumption of metadata, representing the curated, analytics-ready tier in our medallion architecture (Bronze → Silver → Gold).
+The Gold layer serves as the single entry point for both human and AI consumption of metadata, representing the curated, analytics-ready tier in the Lakehouse.
 
 ## Architecture
 
-The Metadata Lakehouse follows a medallion architecture pattern:
+The Lakehouse consists of:
 
-- **Bronze Layer**: Raw metadata ingestion
-- **Silver Layer**: Cleaned and validated metadata
+- **Bronze Layer**: Raw data
 - **Gold Layer**: Curated, production-ready analytical models for consumption
 
 This repository focuses exclusively on the **Gold Layer**, providing standardized views and models that transform metadata into analytics-ready formats.
@@ -53,20 +52,20 @@ Navigate to the platform-specific folder for detailed setup instructions:
 
 The Gold layer delivers:
 
-- **Unified Asset Registry**: Centralized view of all metadata assets across SQL, BI, pipelines, data quality, and object domains
-- **Relational Asset Details**: Consolidated metadata for databases, schemas, tables, views, columns, queries, and procedures
-- **Governance & Classification**: Tag and custom metadata views for data governance
+- **Unified Asset Registry**: Centralized view of all  assets across SQL, BI, pipelines, data quality, and object domains
+- **Relational Asset Details**: Consolidated  for databases, schemas, tables, views, columns, queries, and procedures
+- **Governance & Classification**: Tag and custom  views for data governance
 - **Lineage**: Complete multi-hop upstream and downstream lineage relationships
 - **Data Quality**: Views for Atlan-native and third-party data quality rules
-- **Pipeline Details**: Orchestration and pipeline asset metadata
+- **Pipeline Details**: Orchestration and pipeline asset 
 - **Glossary**: Business glossary terms, categories, and hierarchies
 
 ## Use Cases
 
 The Gold layer enables:
 
-- **Analytics & Reporting**: Query-ready metadata for business intelligence and analytics
-- **AI/ML Consumption**: Structured metadata for AI agents and machine learning models
+- **Analytics & Reporting**: Query-ready  for business intelligence and analytics
+- **AI/ML Consumption**: Structured  for AI agents and machine learning models
 - **Data Governance**: Standardized views for compliance and governance reporting
 - **Lineage Analysis**: Complete lineage visualization and impact analysis
 - **Asset Discovery**: Unified search and discovery across all metadata types
