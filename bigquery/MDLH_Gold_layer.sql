@@ -1257,13 +1257,13 @@ AS
 WITH tag_agg AS (
     SELECT
         asset_guid,
-        ARRAY_AGG(DISTINCT tag_name) AS tag_names
+        IFNULL(ARRAY_AGG(DISTINCT tag_name IGNORE NULLS),[]) AS tag_names
     FROM ATLAN_GOLD.TAGS
     GROUP BY asset_guid
 )
-SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART1 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid UNION ALL
-SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART2 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid UNION ALL
-SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART3 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid ;
+SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART11 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid UNION ALL
+SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART21 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid UNION ALL
+SELECT guid, asset_type, asset_name, asset_qualified_name, description, readme_guid, status, created_at, created_by, updated_at, updated_by, certificate_status, certificate_updated_by, certificate_updated_at, connector_name, connector_qualified_name,source_created_at, source_created_by, source_updated_at, source_updated_by, owner_users, owner_groups, term_guids, popularity_score, tag.tag_names AS tags, has_lineage FROM ATLAN_GOLD.ASSETS_PART31 asset LEFT JOIN tag_agg tag ON asset.guid = tag.asset_guid ;
 
 
 CREATE OR REPLACE VIEW ATLAN_GOLD.LINEAGE_EDGES (
