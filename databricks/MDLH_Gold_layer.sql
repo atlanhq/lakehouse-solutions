@@ -632,6 +632,9 @@ FROM MatillionProject_entity;
 CREATE OR REPLACE VIEW ATLAN.ATLAN_GOLD.RELATIONAL_ASSET_DETAILS (
     guid COMMENT 'The asset’s globally-unique identifier',
     asset_type COMMENT 'The type of asset',
+    source_read_query_cost COMMENT 'Total cost of read queries at source',
+    source_total_cost COMMENT 'Total cost of all operations at source',
+    source_cost_unit COMMENT 'The unit of measure for cost at source (e.g., credits)',
     column_datatype COMMENT 'Data type of this column',
     column_is_nullable COMMENT 'Whether or not the values in this column can be null',
     column_queries COMMENT 'Queries that access this column',
@@ -675,14 +678,14 @@ COMMENT 'A unified relational asset view that consolidates metadata for Database
 AS
 
 SELECT
-    guid, typename, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 
     schemas, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM Database_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, databasename, materialisedviews, procedures, tables, views, NULL, NULL,
@@ -690,15 +693,15 @@ SELECT
 FROM Schema_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, columns, columncount,
     queries, sourcereadrecentuserlist, rowcount, sizebytes, sourceReadCount, NULL, NULL, NULL, NULL, NULL
-FROM table_entity
+FROM Table_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -706,15 +709,15 @@ SELECT
 FROM View_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     datatype, isnullable, queries, sourcereadrecentuserlist, tablename, sourceReadCount, viewname, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM column_entity
+FROM Column_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     functionlanguage, functionreturntype, functionschema, functiontype, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -722,7 +725,7 @@ SELECT
 FROM Function_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, columns, parent,
     rawquerytext, tables, views, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -730,7 +733,7 @@ SELECT
 FROM Query_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, columns, definition, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -738,12 +741,13 @@ SELECT
 FROM MaterialisedView_entity
 UNION ALL
 SELECT
-    guid, typename,
+    guid, typename, sourcereadquerycost, sourcetotalcost, sourcecostunit,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, definition, schemaName, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM Procedure_entity;
+
 
 CREATE OR REPLACE VIEW ATLAN.ATLAN_GOLD.README (
     guid COMMENT 'The asset’s globally-unique identifier',
