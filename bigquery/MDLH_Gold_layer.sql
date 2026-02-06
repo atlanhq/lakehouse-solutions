@@ -1391,7 +1391,7 @@ DOWNSTREAM AS (
         d.related_guid AS connecting_guid,
         d.level + 1 AS level,
         d.path_str || ',' || e.output_guid AS path_str
-    FROM `development-platform-370010.atlan_wh_us_east_1.DOWNSTREAM` d
+    FROM DOWNSTREAM d
     JOIN ATLAN_GOLD.BASE_EDGES e
         ON d.related_guid = e.input_guid
     WHERE STRPOS(d.path_str, e.output_guid) = 0
@@ -1422,7 +1422,7 @@ UPSTREAM AS (
         u.related_guid AS connecting_guid,
         u.level + 1 AS level,
         u.path_str || ',' || e.input_guid AS path_str
-    FROM `development-platform-370010.atlan_wh_us_east_1.UPSTREAM` u
+    FROM UPSTREAM u
     JOIN ATLAN_GOLD.BASE_EDGES e
         ON u.related_guid = e.output_guid
     WHERE STRPOS(u.path_str, e.input_guid) = 0
@@ -1438,7 +1438,7 @@ SELECT DISTINCT
     related_type,
     connecting_guid,
     level
-FROM `development-platform-370010.atlan_wh_us_east_1.DOWNSTREAM`
+FROM DOWNSTREAM
 WHERE related_guid IS NOT NULL
 
 UNION ALL
@@ -1453,9 +1453,5 @@ SELECT DISTINCT
     related_type,
     connecting_guid,
     level
-FROM `development-platform-370010.atlan_wh_us_east_1.UPSTREAM`
+FROM UPSTREAM
 WHERE related_guid IS NOT NULL;
-
-
-
-
