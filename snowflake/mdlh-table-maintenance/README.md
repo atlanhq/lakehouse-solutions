@@ -208,17 +208,3 @@ For each selected table, the app:
 - **Single Schema**: Checks one schema at a time (can be run multiple times for different schemas)
 - **Manual Selection**: Tables must be selected manually (no bulk "repair all" without selection)
 
-## Future Enhancements
-
-Potential improvements:
-- Bulk repair across multiple schemas
-- Scheduled automatic checks
-- Email/notification alerts for stale tables
-- Historical tracking of refresh patterns
-- Integration with Snowflake tasks for automation
-
-## Resources
-
-- [Snowflake Iceberg Tables](https://docs.snowflake.com/en/user-guide/tables-iceberg)
-- [ALTER ICEBERG TABLE](https://docs.snowflake.com/en/sql-reference/sql/alter-iceberg-table)
-- [INFORMATION_SCHEMA.TABLES](https://docs.snowflake.com/en/sql-reference/info-schema/tables)
