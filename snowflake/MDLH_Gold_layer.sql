@@ -155,7 +155,7 @@ SELECT
     inputs,
     outputs,
     NULL AS process
-FROM MDLH_CONTEXT_STORE."entity_metadata".process
+FROM ATLAN_CONTEXT_STORE."entity_metadata".process
 UNION ALL
 SELECT
     guid,
@@ -182,7 +182,7 @@ SELECT
     inputs,
     outputs,
     NULL AS process
-FROM MDLH_CONTEXT_STORE."entity_metadata".biprocess
+FROM ATLAN_CONTEXT_STORE."entity_metadata".biprocess
 UNION ALL
 SELECT
     guid,
@@ -209,7 +209,7 @@ SELECT
     inputs,
     outputs,
     NULL AS process
-FROM MDLH_CONTEXT_STORE."entity_metadata".columnprocess
+FROM ATLAN_CONTEXT_STORE."entity_metadata".columnprocess
 UNION ALL
 SELECT
     guid,
@@ -236,7 +236,7 @@ SELECT
     inputs,
     outputs,
     NULL AS process
-FROM MDLH_CONTEXT_STORE."entity_metadata".dbtprocess
+FROM ATLAN_CONTEXT_STORE."entity_metadata".dbtprocess
 UNION ALL
 SELECT
     guid,
@@ -263,7 +263,7 @@ SELECT
     inputs,
     outputs,
     process
-FROM MDLH_CONTEXT_STORE."entity_metadata".dbtcolumnprocess;
+FROM ATLAN_CONTEXT_STORE."entity_metadata".dbtcolumnprocess;
 
 CREATE OR REPLACE VIEW ATLAN_GOLD.PUBLIC.GLOSSARY_DETAILS (
     guid COMMENT 'The asset’s globally-unique identifier',
