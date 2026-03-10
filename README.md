@@ -28,6 +28,10 @@ The Gold Layer provides curated, analytics-ready metadata views that serve as th
 - **Pipeline Details**: Orchestration and pipeline asset metadata
 - **Glossary**: Business glossary terms, categories, and hierarchies
 
+### Foreign/External Iceberg Tables *(Databricks, BigQuery)*
+
+Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync.
+
 ### MDLH Table Maintenance *(Snowflake only)*
 
 A native Snowflake Streamlit app that identifies stale Iceberg tables and provides an option to repair them by refreshing metadata and enabling auto-refresh.
@@ -71,15 +75,22 @@ lakehouse-solutions/
 │       └── MDLH_table_refresh_repair.py   # Streamlit app
 ├── databricks/
 │   ├── README.md                          # Databricks solutions overview
-│   └── gold-layer/
-│       ├── README.md                      # Gold Layer setup guide
-│       ├── MDLH_Gold_layer.sql            # Gold Layer deployment script
-│       └── refresh_materialized_views.sql # Scheduled refresh script
+│   ├── gold-layer/
+│   │   ├── README.md                      # Gold Layer setup guide
+│   │   ├── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   │   └── refresh_materialized_views.sql # Scheduled refresh script
+│   └── foreign-iceberg-tables/
+│       ├── README.md                      # Foreign Iceberg Tables setup guide
+│       ├── dbx_foreign_iceberg_tables_create.py   # Table creation script
+│       └── dbx_foreign_iceberg_tables_refresh.py  # Table refresh script
 ├── bigquery/
 │   ├── README.md                          # BigQuery solutions overview
-│   └── gold-layer/
-│       ├── README.md                      # Gold Layer setup guide
-│       └── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   ├── gold-layer/
+│   │   ├── README.md                      # Gold Layer setup guide
+│   │   └── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   └── external-iceberg-tables/
+│       ├── README.md                      # External Iceberg Tables setup guide
+│       └── bq_external_iceberg_tables_create_refresh.py  # Create/refresh script
 ├── duckdb/                                # Coming soon
 └── trino/                                 # Coming soon
 ```
