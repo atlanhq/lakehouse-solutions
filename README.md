@@ -1,36 +1,40 @@
-# Lakehouse Solutions - Gold Layer
+# Lakehouse Solutions
 
 ## Overview
 
-This repository provides the **Gold layer** implementation for the Atlan Lakehouse architecture, enabling Atlan customers to deploy standardized, production-ready analytical models on their own compute environments.
-
-The Gold layer serves as the single entry point for both human and AI consumption of metadata, representing the curated, analytics-ready tier in the Lakehouse.
-
-## Architecture
-
-The Lakehouse consists of:
-
-- **Bronze Layer**: Raw data
-- **Gold Layer**: Curated, production-ready analytical models for consumption
-
-This repository focuses exclusively on the **Gold Layer**, providing standardized views and models that transform metadata into analytics-ready formats.
+This repository provides a collection of solutions for the Atlan Metadata Lakehouse (MDLH), enabling Atlan customers to deploy production-ready tools on their own compute environments. Solutions include analytical models (Gold Layer), maintenance utilities, and more.
 
 ## Supported Platforms
-
-The Gold layer deployment scripts are available for the following compute environments:
 
 - **Snowflake** ❄️
 - **Databricks** 🔷
 - **BigQuery** ☁️
-- **DuckDB** 🦆
-- **Trino** 🚀
+- **DuckDB** 🦆 *(coming soon)*
+- **Trino** 🚀 *(coming soon)*
 
-## Repository Contents
+## Solutions
 
-This repository contains:
+### Gold Layer
 
-- **Documentation**: Comprehensive README files with setup guides and usage instructions
-- **SQL Deployment Scripts**: Production-ready SQL scripts for deploying the Gold layer in customer-managed infrastructure
+The Gold Layer provides curated, analytics-ready metadata views that serve as the single entry point for both human and AI consumption of lakehouse metadata.
+
+**What it delivers:**
+
+- **Unified Asset Registry**: Centralized view of all assets across SQL, BI, pipelines, data quality, and object domains
+- **Relational Asset Details**: Consolidated metadata for databases, schemas, tables, views, columns, queries, and procedures
+- **Governance & Classification**: Tag and custom metadata views for data governance
+- **Lineage**: Complete multi-hop upstream and downstream lineage relationships
+- **Data Quality**: Views for Atlan-native and third-party data quality rules
+- **Pipeline Details**: Orchestration and pipeline asset metadata
+- **Glossary**: Business glossary terms, categories, and hierarchies
+
+### Foreign/External Iceberg Tables *(Databricks, BigQuery)*
+
+Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync.
+
+### MDLH Table Maintenance *(Snowflake only)*
+
+A native Snowflake Streamlit app that identifies stale Iceberg tables and provides an option to repair them by refreshing metadata and enabling auto-refresh.
 
 ## Getting Started
 
@@ -40,32 +44,18 @@ This repository contains:
 - Appropriate permissions to create databases, schemas, views, and tables
 - Connection to your Atlan metadata catalog
 
-### Platform-Specific Setup
+### Platform Guides
 
-Navigate to the platform-specific folder for detailed setup instructions:
+Navigate to the platform-specific folder for available solutions and setup instructions:
 
-- [Snowflake Setup Guide](./snowflake/README.md)
-
-*Additional platform guides coming soon for Databricks, BigQuery, DuckDB, and Trino.*
-
-## What the Gold Layer Provides
-
-The Gold layer delivers:
-
-- **Unified Asset Registry**: Centralized view of all  assets across SQL, BI, pipelines, data quality, and object domains
-- **Relational Asset Details**: Consolidated  for databases, schemas, tables, views, columns, queries, and procedures
-- **Governance & Classification**: Tag and custom  views for data governance
-- **Lineage**: Complete multi-hop upstream and downstream lineage relationships
-- **Data Quality**: Views for Atlan-native and third-party data quality rules
-- **Pipeline Details**: Orchestration and pipeline asset 
-- **Glossary**: Business glossary terms, categories, and hierarchies
+- [Snowflake](./snowflake/)
+- [Databricks](./databricks/)
+- [BigQuery](./bigquery/)
 
 ## Use Cases
 
-The Gold layer enables:
-
-- **Analytics & Reporting**: Query-ready  for business intelligence and analytics
-- **AI/ML Consumption**: Structured  for AI agents and machine learning models
+- **Analytics & Reporting**: Query-ready metadata for business intelligence and analytics
+- **AI/ML Consumption**: Structured metadata for AI agents and machine learning models
 - **Data Governance**: Standardized views for compliance and governance reporting
 - **Lineage Analysis**: Complete lineage visualization and impact analysis
 - **Asset Discovery**: Unified search and discovery across all metadata types
@@ -74,14 +64,35 @@ The Gold layer enables:
 
 ```
 lakehouse-solutions/
-├── README.md (this file)
+├── README.md                              # This file
 ├── snowflake/
-│   ├── README.md              # Snowflake-specific setup guide
-│   └── MDLH_Gold_layer.sql    # Snowflake deployment script
-├── databricks/                # Coming soon
-├── bigquery/                  # Coming soon
-├── duckdb/                    # Coming soon
-└── trino/                     # Coming soon
+│   ├── README.md                          # Snowflake solutions overview
+│   ├── gold-layer/
+│   │   ├── README.md                      # Gold Layer setup guide
+│   │   └── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   └── mdlh-table-maintenance/
+│       ├── README.md                      # Table maintenance setup guide
+│       └── MDLH_table_refresh_repair.py   # Streamlit app
+├── databricks/
+│   ├── README.md                          # Databricks solutions overview
+│   ├── gold-layer/
+│   │   ├── README.md                      # Gold Layer setup guide
+│   │   ├── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   │   └── refresh_materialized_views.sql # Scheduled refresh script
+│   └── foreign-iceberg-tables/
+│       ├── README.md                      # Foreign Iceberg Tables setup guide
+│       ├── dbx_foreign_iceberg_tables_create.py   # Table creation script
+│       └── dbx_foreign_iceberg_tables_refresh.py  # Table refresh script
+├── bigquery/
+│   ├── README.md                          # BigQuery solutions overview
+│   ├── gold-layer/
+│   │   ├── README.md                      # Gold Layer setup guide
+│   │   └── MDLH_Gold_layer.sql            # Gold Layer deployment script
+│   └── external-iceberg-tables/
+│       ├── README.md                      # External Iceberg Tables setup guide
+│       └── bq_external_iceberg_tables_create_refresh.py  # Create/refresh script
+├── duckdb/                                # Coming soon
+└── trino/                                 # Coming soon
 ```
 
 ## Contributing
