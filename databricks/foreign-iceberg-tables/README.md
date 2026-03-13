@@ -19,7 +19,7 @@ Contact your Databricks account representative and request enablement of the fol
 CREATE TABLE ... UNIFORM ICEBERG ... METADATA_PATH
 ```
 
-This is a Private Preview feature and must be enabled on your Databricks workspace before proceeding. Once enabled, notify Atlan Support so they can continue with the setup.
+This is a Private Preview feature (Foreign Iceberg Tables Private Preview) and must be enabled on your Databricks workspace before proceeding. Once enabled, notify Atlan Support so they can continue with the setup.
 
 ### 2. Contact Atlan Support
 
