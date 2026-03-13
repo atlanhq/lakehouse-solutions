@@ -32,6 +32,10 @@ The Gold Layer provides curated, analytics-ready metadata views that serve as th
 
 Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync.
 
+### AI Agent Skill
+
+An [Agent Skills](https://agentskills.io) skill that teaches AI coding agents (Claude Code, Cortex Code, Genie Code) how to connect to and query the lakehouse. Includes ~45 SQL templates covering metadata completeness, lineage analysis, glossary export, and usage analytics (active users, feature adoption, engagement, retention, health scoring). See [skills/atlan-lakehouse/](./skills/atlan-lakehouse/) for installation instructions.
+
 ### MDLH Table Maintenance *(Snowflake only)*
 
 A native Snowflake Streamlit app that identifies stale Iceberg tables and provides an option to repair them by refreshing metadata and enabling auto-refresh.
@@ -91,6 +95,10 @@ lakehouse-solutions/
 │   └── external-iceberg-tables/
 │       ├── README.md                      # External Iceberg Tables setup guide
 │       └── bq_external_iceberg_tables_create_refresh.py  # Create/refresh script
+├── skills/
+│   └── atlan-lakehouse/
+│       ├── README.md                      # Installation & usage guide
+│       └── SKILL.md                       # Agent skill definition
 ├── duckdb/                                # Coming soon
 └── trino/                                 # Coming soon
 ```
