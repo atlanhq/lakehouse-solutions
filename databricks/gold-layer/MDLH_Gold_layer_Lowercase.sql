@@ -1,21 +1,6 @@
 -- ============================================================================
 -- MDLH Gold Layer SQL - Databricks Lowercase Version
 -- ============================================================================
--- 
--- This file is a transformed version of MDLH_Gold_layer.sql (Databricks) with the following
--- transformations applied per ticket LH-1116:
--- https://linear.app/atlan-epd/issue/LH-1116/update-the-gold-layer-scripts-for-lower-case-support
---
--- Transformations Applied:
--- 1. Removed '_entity' suffix from all table names (e.g., GlossaryTerm_entity -> glossaryterm)
--- 2. Converted all mixed-case table names to lowercase (e.g., DataDomain_entity -> datadomain)
--- 3. Converted relationship table names to lowercase without underscores
---    (e.g., Tag_Relationship -> tagrelationship, Custommetadata_Relationship -> custommetadatarelationship)
---
--- Source: https://github.com/atlanhq/lakehouse-solutions/blob/main/databricks/gold-layer/MDLH_Gold_layer.sql
--- Target: https://github.com/atlanhq/lakehouse-solutions/blob/main/databricks/gold-layer/MDLH_Gold_layer_Lowercase.sql
---
--- ============================================================================
 
 CREATE CATALOG IF NOT EXISTS ATLAN;
 
