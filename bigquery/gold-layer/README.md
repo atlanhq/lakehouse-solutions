@@ -31,10 +31,20 @@ The SQL script uses fully qualified table names for all source tables. You must 
 ```sql
 FROM `development-platform-370010.atlan_wh_us_east_1.Tag_Relationship`;
 ```
-
 With:
 ```sql
 FROM `my-gcp-project.mdlh_catalog.Tag_Relationship`;
+```
+
+OR (for lowercase script)
+
+```sql
+FROM `<project_id>.<region>.tagrelationship`;
+```
+
+With:
+```sql
+FROM `<project_id>.<region>.tagrelationship`;
 ```
 
 **How to replace**:
