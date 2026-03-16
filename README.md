@@ -28,9 +28,13 @@ The Gold Layer provides curated, analytics-ready metadata views that serve as th
 - **Pipeline Details**: Orchestration and pipeline asset metadata
 - **Glossary**: Business glossary terms, categories, and hierarchies
 
+### Catalog Integration *(Snowflake)*
+
+Snowflake supports native Iceberg REST Catalog federation, allowing you to query the Atlan Lakehouse directly without any external scripts or scheduled refresh jobs. The catalog integration guide walks through creating an External Volume, Catalog Integration, and Linked Database.
+
 ### Foreign/External Iceberg Tables *(Databricks, BigQuery)*
 
-Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync.
+Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync. Databricks supports both AWS S3 and Azure ADLS storage.
 
 ### AI Agent Skill
 
@@ -71,6 +75,8 @@ lakehouse-solutions/
 ├── README.md                              # This file
 ├── snowflake/
 │   ├── README.md                          # Snowflake solutions overview
+│   ├── catalog-integration/
+│   │   └── README.md                      # Catalog integration setup guide
 │   ├── gold-layer/
 │   │   ├── README.md                      # Gold Layer setup guide
 │   │   └── MDLH_Gold_layer.sql            # Gold Layer deployment script
