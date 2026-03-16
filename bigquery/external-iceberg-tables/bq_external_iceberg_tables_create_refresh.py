@@ -46,6 +46,16 @@ def bq_safe_dataset(namespace: str) -> str:
     """
     return namespace.replace("-", "_")
 
+def bq_safe_table_name(table_name: str) -> str:
+    """
+    Convert table name to BigQuery-safe name.
+    If table name is "table" or "Table" (reserved keyword), append "_entity" suffix.
+    """
+    # Check if table name is the reserved keyword "table" (case-insensitive)
+    if table_name.lower() == "table":
+        return f"{table_name}_entity"
+    return table_name
+
 
 def get_metadata_path(table) -> str:
     if not table.metadata_location:
@@ -160,7 +170,9 @@ def main():
                 try:
                     table = reader.catalog.load_table(identifier)
                     metadata_path = get_metadata_path(table)
-                    table_name = identifier[-1]
+                    original_table_name = identifier[-1]
+                    # Apply BigQuery-safe transformation (handle reserved keyword "table")
+                    table_name = bq_safe_table_name(original_table_name)
 
                     create_external_iceberg_table(
                         bq_client,
@@ -169,9 +181,14 @@ def main():
                         metadata_path
                     )
 
-                    logger.info(
-                        f"✅ Created {dataset_id}.{table_name}"
-                    )
+                    if original_table_name != table_name:
+                        logger.info(
+                            f"✅ Created {dataset_id}.{table_name} (renamed from {original_table_name} to avoid reserved keyword)"
+                        )
+                    else:
+                        logger.info(
+                            f"✅ Created {dataset_id}.{table_name}"
+                        )
 
                 except Exception as table_err:
                     logger.error(
