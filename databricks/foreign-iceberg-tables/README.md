@@ -1,6 +1,6 @@
 # Databricks Foreign Iceberg Tables
 
-Databricks does not currently support querying federated (external) Iceberg REST catalogs natively. These scripts provide a workaround by creating "foreign" Iceberg table references in Unity Catalog that point directly to the Atlan Metadata Lakehouse (MDLH) Iceberg metadata files stored in S3.
+Databricks does not currently support querying federated (external) Iceberg REST catalogs natively. These scripts provide a workaround by creating "foreign" Iceberg table references in Unity Catalog that point directly to the Atlan Lakehouse Iceberg metadata files stored in cloud object storage (Amazon S3 or ADLS).
 
 Two scripts are provided:
 
@@ -25,7 +25,9 @@ This is a Private Preview feature (Foreign Iceberg Tables Private Preview) and m
 
 After the Private Preview feature is confirmed enabled, reach out to Atlan Support. Atlan will provide:
 
-- **IAM Role ARN** and **S3 Bucket Name** for storage access
+- **Storage access details** (depends on your cloud):
+  - **AWS**: IAM Role ARN and Amazon S3 Bucket Name
+  - **Azure**: Service Principal credentials (Directory ID, Application ID, Client Secret) and Storage Account name
 - **Catalog details**:
   - Catalog URI
   - Catalog Name
@@ -37,17 +39,71 @@ You can also find your Catalog details in the Atlan UI:
 
 ### 3. Create a Storage Credential in Databricks
 
-Using the IAM Role ARN provided by Atlan, create a [storage credential](https://docs.databricks.com/en/connect/unity-catalog/storage-credentials.html) in Unity Catalog that can assume Atlan's IAM role.
+Create a [storage credential](https://docs.databricks.com/en/connect/unity-catalog/storage-credentials.html) in Unity Catalog using the details provided by Atlan. Follow the option that matches your cloud environment.
+
+#### Option A: AWS (IAM Role)
+
+Create a storage credential using the IAM Role ARN provided by Atlan.
+
+1. Navigate to **Catalog Explorer > Credentials > Create Credential**
+2. Select **AWS IAM Role** as the credential type
+3. Enter the **IAM Role ARN** provided by Atlan
+4. In **Advanced Options**, enable **Limit to read-only use**
 
 Once created, share the following back with Atlan Support:
 - The **IAM Role ARN** of the storage credential you created
 - The **External ID** associated with the credential
 
-Atlan will update their trust policy to allow your credential to access the S3 bucket.
+Atlan will update their trust policy to allow your credential to access the Amazon S3 bucket.
+
+#### Option B: Azure (Service Principal)
+
+Create a storage credential using the Azure Service Principal credentials provided by Atlan.
+
+**Using the Databricks CLI:**
+
+```
+databricks storage-credentials create --json '{
+  "name": "<credential-name>",
+  "azure_service_principal": {
+    "directory_id": "<DIRECTORY_ID>",
+    "application_id": "<APPLICATION_ID>",
+    "client_secret": "<CLIENT_SECRET>"
+  }
+}'
+```
+
+Replace the placeholders with the Service Principal credentials provided by Atlan.
+
+**Or using the UI:**
+
+1. Navigate to **Catalog Explorer > Credentials > Create Credential**
+2. Select **Azure Service Principal** as the credential type
+3. Enter the **Directory (Tenant) ID**, **Application (Client) ID**, and **Client Secret** provided by Atlan
 
 ### 4. Create an External Location
 
-Create an [external location](https://docs.databricks.com/en/connect/unity-catalog/external-locations.html) in Unity Catalog that points to the S3 bucket path provided by Atlan, using the storage credential from Step 3.
+Create an [external location](https://docs.databricks.com/en/connect/unity-catalog/external-locations.html) in Unity Catalog that points to the storage path provided by Atlan, using the storage credential from Step 3.
+
+#### Option A: AWS (Amazon S3)
+
+1. Navigate to **Catalog Explorer > External Locations > Create External Location**
+2. Select **Manual** and choose **Amazon S3** as the storage type
+3. Enter the **Amazon S3 path** provided by Atlan (e.g., `s3://<bucket-name>/<catalog-name>`)
+4. Select the credential created in Step 3
+5. Enable **Read-only mode** in advanced options
+
+#### Option B: Azure (ADLS)
+
+1. Navigate to **Catalog Explorer > External Locations > Create External Location**
+2. Select **Manual** and choose **Azure Data Lake Storage** as the storage type
+3. Enter the **ADLS path** provided by Atlan in the following format:
+   ```
+   abfss://objectstore@<storage-account-name>.dfs.core.windows.net/atlan-wh/
+   ```
+4. Select the credential created in Step 3
+5. In **Advanced Options**, enable **Limit to read-only use**
+6. Click **Test Connection** to validate the setup
 
 ### 5. Create a Target Catalog
 
