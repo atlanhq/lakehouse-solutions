@@ -36,6 +36,7 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 | `ENTITY_METADATA`  | Catalog metadata: one table per asset type in Atlan's metamodel (e.g., `TABLE`, `COLUMN`, `VIEW`, `GLOSSARYTERM`, `DBTMODEL`, `DATADOMAIN`, etc.), plus relationship tables like `LINEAGE`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, and `DATA_MESH_DETAILS`. Named `atlan-ns` on tenants onboarded before February 2026. **Important:** There is one table per asset type — the supertype tables (e.g., `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`) are structural parents in Atlan's type hierarchy and typically have 0 rows. Query the specific type table that matches the assets you need (e.g., `TABLE` for Table assets, `COLUMN` for Column assets). Many tables will also have 0 rows if the tenant does not use that connector — for example, `AIRFLOWDAG` is empty if the tenant does not use Airflow. This is expected. |
 | `ENTITY_HISTORY`   | Historical snapshots mirroring every table in `ENTITY_METADATA`, with added `snapshot_timestamp` and `snapshot_date` columns for temporal analysis, change tracking, and audit trails. |
 | `USAGE_ANALYTICS`  | Product telemetry: page views, user actions, and user identity snapshots.                                                                   |
+| `OBSERVABILITY`    | Workflow and job execution metrics. Contains a single table `JOB_METRICS` with lifecycle timestamps, status codes, and workflow-specific `custom_metrics` (JSON). Use to track DQ scores, job success/failure rates, retry patterns, and pipeline duration. |
 
 #### `USAGE_ANALYTICS` tables
 
@@ -44,6 +45,14 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 | `PAGES`  | page name, tab, asset GUID, connector name, asset type, user ID, domain, timestamp                 |
 | `TRACKS` | user ID, event_text, domain, timestamp                                                              |
 | `USERS`  | user ID, email, username, role, license_type, job_role, created_at                                 |
+
+#### `OBSERVABILITY` tables
+
+| Table         | Key columns                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `JOB_METRICS` | tenant_id, service_name, job_name, job_instance_id, started_at, completed_at, status_code, error_message, custom_metrics (JSON), attempt_number, retry_count |
+
+> **`custom_metrics` is a JSON string** whose schema varies by `job_name`. Key job types: `AtlasDqOrchestrationWorkflow` (DQ scores), `AtlasTypeDefDqWorkflow` (per-type DQ), `UsageAnalyticsCountValidationWorkflow` (usage table validation), `AtlasBulkTypedefRefreshWorkflow` (metadata sync), `AtlasNotificationProcessorWorkflow` (incremental sync), `AtlasReconciliationWorkflow` (reconciliation). Use `SELECT DISTINCT job_name` to discover all job types in a tenant.
 
 ## When to Use
 
@@ -58,6 +67,7 @@ Activate this skill when:
 - User wants to analyze product adoption: DAU/WAU/MAU, feature engagement, retention, or engagement depth
 - User wants to build usage dashboards or customer health scorecards
 - User wants to identify churned/reactivated users, power users, or engagement tiers
+- User wants to monitor Lakehouse job health, DQ score trends, pipeline success rates, or job duration
 
 ## Platform Routing — READ THIS FIRST
 
@@ -1707,6 +1717,85 @@ LEFT JOIN (SELECT id, MAX(role) AS role, MAX(job_role) AS job_role
 LEFT JOIN active_last_30d a ON a.user_id = ud.user_id
 WHERE ud.domain = {{DOMAIN}}
 GROUP BY ud.domain, u.role, u.job_role ORDER BY total_users DESC;
+```
+
+---
+
+## Observability Templates
+
+These query the `OBSERVABILITY` namespace. The single table `JOB_METRICS` stores one row per job execution. The `custom_metrics` column is a JSON string whose schema varies by `job_name`.
+
+> **Partition pruning:** `JOB_METRICS` is partitioned by month on `started_at`. Always include a time-range filter on `started_at` to avoid full table scans.
+
+### DQ Score Over Time
+
+Trends the `dq_score` from `AtlasDqOrchestrationWorkflow` runs by day. Use to monitor whether Lakehouse data quality is stable, improving, or degrading.
+
+```sql
+SELECT
+    DATE(started_at)                            AS run_date,
+    job_instance_id,
+    PARSE_JSON(custom_metrics):dq_score::FLOAT  AS dq_score,
+    PARSE_JSON(custom_metrics):total_typedefs::INT
+                                                AS total_typedefs,
+    PARSE_JSON(custom_metrics):total_mismatch_count::INT
+                                                AS total_mismatches,
+    DATEDIFF('second', started_at, completed_at)
+                                                AS duration_seconds
+FROM {{DATABASE}}.OBSERVABILITY.JOB_METRICS
+WHERE job_name = 'AtlasDqOrchestrationWorkflow'
+  AND started_at >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+ORDER BY run_date DESC;
+```
+
+### Job Success and Failure Rates
+
+Counts job executions by status for each job type over a configurable window. Identifies jobs that are failing frequently.
+
+```sql
+SELECT
+    job_name,
+    COUNT(*)                                                AS total_runs,
+    COUNT(CASE WHEN status_code = 200 THEN 1 END)          AS successes,
+    COUNT(CASE WHEN status_code != 200 THEN 1 END)         AS failures,
+    ROUND(
+        100.0 * COUNT(CASE WHEN status_code = 200 THEN 1 END)
+        / NULLIF(COUNT(*), 0), 2
+    )                                                       AS success_rate_pct,
+    MAX(CASE WHEN status_code != 200
+             THEN error_message END)                        AS latest_error
+FROM {{DATABASE}}.OBSERVABILITY.JOB_METRICS
+WHERE started_at >= DATEADD('day', -7, CURRENT_TIMESTAMP())
+GROUP BY job_name
+ORDER BY failures DESC, total_runs DESC;
+```
+
+### Job Duration Analysis
+
+Calculates duration statistics per job type and flags long-running executions. Use to detect performance regressions.
+
+```sql
+WITH job_durations AS (
+    SELECT
+        job_name,
+        job_instance_id,
+        DATE(started_at)                                AS run_date,
+        DATEDIFF('second', started_at, completed_at)    AS duration_seconds
+    FROM {{DATABASE}}.OBSERVABILITY.JOB_METRICS
+    WHERE started_at >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+      AND completed_at IS NOT NULL
+)
+SELECT
+    job_name,
+    COUNT(*)                                            AS total_runs,
+    ROUND(AVG(duration_seconds), 1)                     AS avg_duration_sec,
+    ROUND(MEDIAN(duration_seconds), 1)                  AS p50_duration_sec,
+    ROUND(PERCENTILE_CONT(0.95)
+          WITHIN GROUP (ORDER BY duration_seconds), 1)  AS p95_duration_sec,
+    MAX(duration_seconds)                               AS max_duration_sec
+FROM job_durations
+GROUP BY job_name
+ORDER BY avg_duration_sec DESC;
 ```
 
 ---
