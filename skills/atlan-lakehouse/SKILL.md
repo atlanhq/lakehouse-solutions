@@ -33,7 +33,7 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 
 | Namespace          | Contents                                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENTITY_METADATA`  | Catalog metadata: assets, glossaries, tags, lineage, custom metadata. Named `atlan-ns` on tenants onboarded before February 2026.          |
+| `ENTITY_METADATA`  | Catalog metadata: one table per asset type in Atlan's metamodel (e.g., `TABLE`, `COLUMN`, `VIEW`, `GLOSSARYTERM`, `DBTMODEL`, `DATADOMAIN`, etc.), plus relationship tables like `LINEAGE`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, and `DATA_MESH_DETAILS`. Named `atlan-ns` on tenants onboarded before February 2026. **Important:** There is one table per asset type — the supertype tables (e.g., `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`) are structural parents in Atlan's type hierarchy and typically have 0 rows. Query the specific type table that matches the assets you need (e.g., `TABLE` for Table assets, `COLUMN` for Column assets). Many tables will also have 0 rows if the tenant does not use that connector — for example, `AIRFLOWDAG` is empty if the tenant does not use Airflow. This is expected. |
 | `ENTITY_HISTORY`   | Historical snapshots mirroring every table in `ENTITY_METADATA`, with added `snapshot_timestamp` and `snapshot_date` columns for temporal analysis, change tracking, and audit trails. |
 | `USAGE_ANALYTICS`  | Product telemetry: page views, user actions, and user identity snapshots.                                                                   |
 
@@ -90,7 +90,7 @@ When running inside Snowflake (e.g., Cortex Code), the lakehouse data is already
 SHOW SCHEMAS IN DATABASE <lakehouse_database>;
 
 -- Query tables
-SELECT * FROM <lakehouse_database>.ENTITY_METADATA.ASSETS LIMIT 10;
+SELECT * FROM <lakehouse_database>.ENTITY_METADATA.TABLE LIMIT 10;  -- use concrete type tables (TABLE, COLUMN, VIEW, etc.), not ASSET
 SELECT * FROM <lakehouse_database>.USAGE_ANALYTICS.TRACKS LIMIT 10;
 ```
 
@@ -107,7 +107,7 @@ When running inside Databricks (e.g., Genie Code), the lakehouse data is already
 SHOW SCHEMAS IN <lakehouse_catalog>;
 
 -- Query tables
-SELECT * FROM <lakehouse_catalog>.ENTITY_METADATA.ASSETS LIMIT 10;
+SELECT * FROM <lakehouse_catalog>.ENTITY_METADATA.TABLE LIMIT 10;  -- use concrete type tables (TABLE, COLUMN, VIEW, etc.), not ASSET
 SELECT * FROM <lakehouse_catalog>.USAGE_ANALYTICS.TRACKS LIMIT 10;
 ```
 
@@ -252,7 +252,9 @@ Templates use `{{PLACEHOLDER}}` parameters:
 
 ## Entity Metadata Templates
 
-These query the `ENTITY_METADATA` namespace. Tables include `ASSETS`, `LINEAGE`, `GLOSSARY_DETAILS`, `README`, `CUSTOM_METADATA`, `DATA_MESH_DETAILS`, and others. Use `catalog.list_tables("ENTITY_METADATA")` or `SHOW TABLES IN <db>.ENTITY_METADATA` to discover the full set.
+These query the `ENTITY_METADATA` namespace. Key relationship/consolidated tables include `LINEAGE`, `GLOSSARY_DETAILS`, `README`, `CUSTOM_METADATA`, and `DATA_MESH_DETAILS`. Asset data lives in **per-type tables** (e.g., `TABLE`, `COLUMN`, `VIEW`, `DBTMODEL`, `GLOSSARYTERM`). Use `catalog.list_tables("ENTITY_METADATA")` or `SHOW TABLES IN <db>.ENTITY_METADATA` to discover the full set.
+
+> **Supertype tables have 0 rows.** Atlan's metamodel uses a type hierarchy. Abstract supertype tables like `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`, `NOSQL`, `OBJECTSTORE`, `CATALOG`, `INFRASTRUCTURE`, and `EVENTSTORE` exist in the namespace but contain no data — they are structural parents only. Always query the concrete type table instead (e.g., `TABLE` not `ASSET`, `SNOWFLAKE` not `SQL`). Similarly, tables for unused connectors (e.g., `AIRFLOWDAG` on a tenant that does not use Airflow) will have 0 rows. When building cross-type queries, `UNION ALL` across the specific type tables you need rather than querying a supertype.
 
 ### Metadata Completeness: Asset Enrichment Tracking
 
@@ -1716,6 +1718,7 @@ GROUP BY ud.domain, u.role, u.job_role ORDER BY total_users DESC;
 | OAuth Failed     | Check Client ID/Secret and role name; re-retrieve credentials from Marketplace    |
 | Table Not Found  | Try `atlan-ns` instead of `entity_metadata` (tenants onboarded before Feb 2026)   |
 | Empty Results    | Verify the entity type has data; check `{{DOMAIN}}` filter matches your tenant    |
+| Table Has 0 Rows | This is expected for **supertype tables** (`ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`, etc.) — these are abstract parents in Atlan's type hierarchy and contain no data. Query the concrete type table instead (e.g., `TABLE`, `COLUMN`, `VIEW`). Also expected for unused connectors (e.g., `AIRFLOWDAG` if the tenant doesn't use Airflow). |
 | Wrong Database   | Ask the user which database/catalog contains their Atlan Lakehouse                |
 | Wrong Catalog    | Ask the user for the catalog name from their Lakehouse connection details          |
 | Column Not Found (PyIceberg) | Polaris returns lowercase column names — use `timestamp` not `TIMESTAMP` |
