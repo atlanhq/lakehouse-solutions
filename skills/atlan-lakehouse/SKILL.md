@@ -130,7 +130,7 @@ For generic Python environments (Claude Code, notebooks, scripts), connect via t
 #### Python Dependencies
 
 ```bash
-python -c "import pyiceberg" 2>/dev/null || pip install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas
+python -c "import pyiceberg" 2>/dev/null || uv pip install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas 2>/dev/null || pip install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas 2>/dev/null || pip3 install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas
 ```
 
 #### Required Credentials
