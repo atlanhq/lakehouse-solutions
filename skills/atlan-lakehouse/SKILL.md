@@ -4,7 +4,8 @@ description: >
   Use this skill when the user wants to query Atlan catalog metadata or usage analytics at scale,
   build reports on assets/glossaries/tags/user adoption, or analyze metadata from the lakehouse.
   Works across platforms: Snowflake (Cortex Code), Databricks (Genie Code), and Python (PyIceberg).
-  Includes SQL template library for metadata completeness, lineage analysis, glossary export,
+  Includes the GOLD namespace (curated, pre-joined star-schema tables for simplified asset metadata queries),
+  plus SQL template library for metadata completeness, glossary export,
   and comprehensive usage analytics (active users, feature adoption, engagement, retention, health scoring).
 license: Apache-2.0
 compatibility: SQL (Snowflake, Databricks), Python 3.9+ with PyIceberg
@@ -12,7 +13,7 @@ metadata:
   author: atlan-platform-team
   version: "1.0.0"
   category: data-integration
-  keywords: atlan-lakehouse, iceberg, polaris, pyiceberg, analytics, usage-analytics, snowflake, cortex, databricks, genie, lineage, glossary, metadata-completeness
+  keywords: atlan-lakehouse, iceberg, polaris, pyiceberg, analytics, usage-analytics, snowflake, cortex, databricks, genie, lineage, glossary, metadata-completeness, gold-namespace
 ---
 
 # Atlan Lakehouse Skill
@@ -33,7 +34,8 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 
 | Namespace          | Contents                                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENTITY_METADATA`  | Catalog metadata: one table per asset type in Atlan's metamodel (e.g., `TABLE`, `COLUMN`, `VIEW`, `GLOSSARYTERM`, `DBTMODEL`, `DATADOMAIN`, etc.), plus relationship tables like `LINEAGE`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, and `DATA_MESH_DETAILS`. Named `atlan-ns` on tenants onboarded before February 2026. **Important:** There is one table per asset type — the supertype tables (e.g., `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`) are structural parents in Atlan's type hierarchy and typically have 0 rows. Query the specific type table that matches the assets you need (e.g., `TABLE` for Table assets, `COLUMN` for Column assets). Many tables will also have 0 rows if the tenant does not use that connector — for example, `AIRFLOWDAG` is empty if the tenant does not use Airflow. This is expected. |
+| `GOLD`             | **Start here for asset metadata queries.** Curated star-schema layer with pre-joined tables for simplified analytics. Central `ASSETS` table joined to detail tables (`RELATIONAL_ASSET_DETAILS`, `GLOSSARY_DETAILS`, `DATA_QUALITY_DETAILS`, `PIPELINE_DETAILS`, `BI_ASSET_DETAILS`, `DATA_MESH_DETAILS`) via `guid`. Does **not** contain tags, custom metadata, readmes, or lineage — use `ENTITY_METADATA` for those. |
+| `ENTITY_METADATA`  | Catalog metadata: one table per asset type in Atlan's metamodel (e.g., `TABLE`, `COLUMN`, `VIEW`, `GLOSSARYTERM`, `DBTMODEL`, `DATADOMAIN`, etc.), plus relationship/consolidated tables like `TAGS`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, `DATA_MESH_DETAILS`, and lineage process tables (`PROCESS`, `COLUMN_PROCESS`, `BI_PROCESS`). Named `atlan-ns` on tenants onboarded before February 2026. **Important:** There is one table per asset type — the supertype tables (e.g., `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`) are structural parents in Atlan's type hierarchy and typically have 0 rows. Query the specific type table that matches the assets you need (e.g., `TABLE` for Table assets, `COLUMN` for Column assets). Many tables will also have 0 rows if the tenant does not use that connector — for example, `AIRFLOWDAG` is empty if the tenant does not use Airflow. This is expected. |
 | `ENTITY_HISTORY`   | Historical snapshots mirroring every table in `ENTITY_METADATA`, with added `snapshot_timestamp` and `snapshot_date` columns for temporal analysis, change tracking, and audit trails. |
 | `USAGE_ANALYTICS`  | Product telemetry: page views, user actions, and user identity snapshots.                                                                   |
 | `OBSERVABILITY`    | Workflow and job execution metrics. Contains a single table `JOB_METRICS` with lifecycle timestamps, status codes, and workflow-specific `custom_metrics` (JSON). Use to track DQ scores, job success/failure rates, retry patterns, and pipeline duration. |
@@ -54,14 +56,29 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 
 > **`custom_metrics` is a JSON string** whose schema varies by `job_name`. Key job types: `AtlasDqOrchestrationWorkflow` (DQ scores), `AtlasTypeDefDqWorkflow` (per-type DQ), `UsageAnalyticsCountValidationWorkflow` (usage table validation), `AtlasBulkTypedefRefreshWorkflow` (metadata sync), `AtlasNotificationProcessorWorkflow` (incremental sync), `AtlasReconciliationWorkflow` (reconciliation). Use `SELECT DISTINCT job_name` to discover all job types in a tenant.
 
+#### `GOLD` tables
+
+| Table                       | Purpose                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `ASSETS`                    | Central hub table — every catalog asset with core attributes (name, type, status, owners, certification, description, popularity, lineage flag). **Start every query here.** |
+| `RELATIONAL_ASSET_DETAILS`  | Database, schema, table, view, column, function, and materialized view attributes (row counts, sizes, costs, column data types, query access). |
+| `GLOSSARY_DETAILS`          | Glossary, category, and term attributes (terms, categories, assigned entities, anchor glossary). |
+| `DATA_QUALITY_DETAILS`      | Data quality checks across Anomalo, Soda, Monte Carlo, and native Atlan DQ rules (check status, last run, priority, dimensions). |
+| `PIPELINE_DETAILS`          | Pipeline and ETL process attributes across ADF, Airflow, dbt, Fivetran, Matillion (input/output process GUIDs). |
+| `BI_ASSET_DETAILS`          | BI tool attributes for PowerBI, Tableau, Looker, Sigma (workspace, project, folder, site references). |
+| `DATA_MESH_DETAILS`         | Data domain and data product attributes (subdomains, stakeholders, criticality, sensitivity, visibility, input/output ports). |
+
+> **What's NOT in GOLD:** Tags, custom metadata, readmes, and lineage are not in the GOLD namespace. For these, use hybrid queries that join GOLD tables to `ENTITY_METADATA` tables: `TAGS` (classification tags), `CUSTOM_METADATA` (custom metadata attributes), `README` (readme content), `PROCESS` / `COLUMN_PROCESS` / `BI_PROCESS` (lineage relationships).
+
 ## When to Use
 
 Activate this skill when:
 
 - User needs to connect to the Atlan Lakehouse from any platform (Snowflake, Databricks, or Python)
 - User wants to query Atlan catalog metadata or run metadata governance reports
+- User wants simplified asset metadata queries using pre-joined tables (GOLD namespace)
+- User needs cross-type asset reports spanning relational, BI, pipeline, DQ, glossary, or data mesh assets
 - User needs to assess metadata completeness, tag/description/owner coverage
-- User wants to analyze lineage coverage, find orphaned assets, or detect circular dependencies
 - User needs to export and analyze glossary terms with categories and assigned entities
 - User wants to track historical metadata changes or generate audit trails
 - User wants to analyze product adoption: DAU/WAU/MAU, feature engagement, retention, or engagement depth
@@ -87,6 +104,30 @@ This applies when: you are in a plain terminal (Claude Code CLI), a Jupyter note
 | Databricks MCP tool available, or user mentions Genie Code / Databricks | **Databricks** | Run SQL directly against the lakehouse catalog |
 | None of the above | **Python** | Use PyIceberg with OAuth credentials |
 
+## Query Planning — Namespace Selection
+
+After determining your platform, choose the right namespace for the query. Follow this decision tree:
+
+1. **Asset metadata** (completeness, ownership, descriptions, certification, asset inventory, glossary, DQ checks, pipelines, BI assets, data mesh)?
+   → **Start with the `GOLD` namespace.** Use `GOLD.ASSETS` as the hub table, join to detail tables as needed.
+
+2. **Asset metadata + tags, custom metadata, readmes, or lineage?**
+   → **Hybrid approach:** Start from `GOLD.ASSETS` for core asset data, then join to `ENTITY_METADATA` tables for what GOLD doesn't have:
+   - `ENTITY_METADATA.TAGS` — classification tags on assets
+   - `ENTITY_METADATA.CUSTOM_METADATA` — custom metadata attributes
+   - `ENTITY_METADATA.README` — readme content
+   - `ENTITY_METADATA.PROCESS` / `COLUMN_PROCESS` / `BI_PROCESS` — lineage relationships
+   - Use `ENTITY_METADATA` directly if GOLD adds no value for the specific query.
+
+3. **Usage analytics** (DAU/WAU/MAU, feature adoption, engagement, retention, health scoring)?
+   → **`USAGE_ANALYTICS` namespace** (`PAGES`, `TRACKS`, `USERS`).
+
+4. **Job/pipeline health** (DQ scores, job success rates, pipeline duration)?
+   → **`OBSERVABILITY` namespace** (`JOB_METRICS`).
+
+5. **Historical/temporal changes** (audit trails, point-in-time snapshots)?
+   → **`ENTITY_HISTORY` namespace** (mirrors `ENTITY_METADATA` with `snapshot_timestamp` / `snapshot_date`).
+
 ## Connecting to the Atlan Lakehouse
 
 ### Snowflake / Cortex Code
@@ -99,12 +140,16 @@ When running inside Snowflake (e.g., Cortex Code), the lakehouse data is already
 -- List schemas (namespaces)
 SHOW SCHEMAS IN DATABASE <lakehouse_database>;
 
--- Query tables
+-- Query GOLD namespace (preferred for asset metadata)
+SELECT * FROM <lakehouse_database>.GOLD.ASSETS LIMIT 10;
+SELECT * FROM <lakehouse_database>.GOLD.RELATIONAL_ASSET_DETAILS LIMIT 10;
+
+-- Query ENTITY_METADATA (for tags, custom metadata, readmes, lineage)
 SELECT * FROM <lakehouse_database>.ENTITY_METADATA.TABLE LIMIT 10;  -- use concrete type tables (TABLE, COLUMN, VIEW, etc.), not ASSET
 SELECT * FROM <lakehouse_database>.USAGE_ANALYTICS.TRACKS LIMIT 10;
 ```
 
-Use the database name as `{{DATABASE}}` in all SQL templates below. The schema maps to the namespace (e.g., `ENTITY_METADATA`, `USAGE_ANALYTICS`).
+Use the database name as `{{DATABASE}}` in all SQL templates below. The schema maps to the namespace (e.g., `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS`).
 
 ### Databricks / Genie Code
 
@@ -116,12 +161,16 @@ When running inside Databricks (e.g., Genie Code), the lakehouse data is already
 -- List schemas (namespaces)
 SHOW SCHEMAS IN <lakehouse_catalog>;
 
--- Query tables
+-- Query GOLD namespace (preferred for asset metadata)
+SELECT * FROM <lakehouse_catalog>.GOLD.ASSETS LIMIT 10;
+SELECT * FROM <lakehouse_catalog>.GOLD.RELATIONAL_ASSET_DETAILS LIMIT 10;
+
+-- Query ENTITY_METADATA (for tags, custom metadata, readmes, lineage)
 SELECT * FROM <lakehouse_catalog>.ENTITY_METADATA.TABLE LIMIT 10;  -- use concrete type tables (TABLE, COLUMN, VIEW, etc.), not ASSET
 SELECT * FROM <lakehouse_catalog>.USAGE_ANALYTICS.TRACKS LIMIT 10;
 ```
 
-Use the catalog name as `{{DATABASE}}` in all SQL templates below. The schema maps to the namespace.
+Use the catalog name as `{{DATABASE}}` in all SQL templates below. The schema maps to the namespace (e.g., `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS`).
 
 ### Python / PyIceberg
 
@@ -251,7 +300,7 @@ Templates use `{{PLACEHOLDER}}` parameters:
 | Parameter | Format | Example | Usage |
 |-----------|--------|---------|-------|
 | `{{DATABASE}}` | Unquoted | `MY_LAKEHOUSE_DB` | Database/catalog name (ask user) |
-| `{{SCHEMA}}` | Unquoted | `USAGE_ANALYTICS` | Schema/namespace name |
+| `{{SCHEMA}}` | Unquoted | `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS` | Schema/namespace name |
 | `{{DOMAIN}}` | Single-quoted | `'acme.atlan.com'` | Your Atlan tenant domain (e.g., `'acme.atlan.com'`). Derive from tenant name: `{tenant}.atlan.com` |
 | `{{START_DATE}}` | Single-quoted | `'2025-01-01'` | Date range start |
 | `{{END_DATE}}` | Single-quoted | `'2025-12-31'` | Date range end |
@@ -260,20 +309,314 @@ Templates use `{{PLACEHOLDER}}` parameters:
 
 ---
 
-## Entity Metadata Templates
+## GOLD Namespace Reference
 
-These query the `ENTITY_METADATA` namespace. Key relationship/consolidated tables include `LINEAGE`, `GLOSSARY_DETAILS`, `README`, `CUSTOM_METADATA`, and `DATA_MESH_DETAILS`. Asset data lives in **per-type tables** (e.g., `TABLE`, `COLUMN`, `VIEW`, `DBTMODEL`, `GLOSSARYTERM`). Use `catalog.list_tables("ENTITY_METADATA")` or `SHOW TABLES IN <db>.ENTITY_METADATA` to discover the full set.
+The GOLD namespace is a **curated, star-schema layer** designed for simplified asset metadata queries. It is the **preferred starting point** for entity/asset metadata use cases.
 
-> **Supertype tables have 0 rows.** Atlan's metamodel uses a type hierarchy. Abstract supertype tables like `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`, `NOSQL`, `OBJECTSTORE`, `CATALOG`, `INFRASTRUCTURE`, and `EVENTSTORE` exist in the namespace but contain no data — they are structural parents only. Always query the concrete type table instead (e.g., `TABLE` not `ASSET`, `SNOWFLAKE` not `SQL`). Similarly, tables for unused connectors (e.g., `AIRFLOWDAG` on a tenant that does not use Airflow) will have 0 rows. When building cross-type queries, `UNION ALL` across the specific type tables you need rather than querying a supertype.
+### Architecture
 
-### Metadata Completeness: Asset Enrichment Tracking
+- **`ASSETS`** is the central hub table containing every catalog asset with common attributes
+- **Detail tables** branch out with domain-specific columns for particular asset categories
+- All tables use **`guid`** as the primary key for consistent joins
+- Data syncs from the underlying `ENTITY_METADATA` namespace in real time
 
-Measures description, tag, certification, ownership, and custom metadata coverage by asset type.
+### ASSETS Table (Hub)
+
+Start every query from `ASSETS`, filter to the assets you need, then join to detail tables.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Globally-unique asset identifier (primary key, join key for all detail tables) |
+| `asset_type` | Asset type (e.g., `Table`, `Column`, `Dashboard`, `DataDomain`) |
+| `status` | Asset status (`ACTIVE`, `DELETED`) |
+| `asset_name` | Asset name |
+| `display_name` | Human-readable display name |
+| `asset_qualified_name` | Fully-qualified asset path |
+| `description` | System-generated or source catalog description |
+| `user_description` | User-authored description within Atlan |
+| `readme_guid` | Identifier for the asset's readme |
+| `created_at` | Creation timestamp (milliseconds since epoch) |
+| `created_by` | Creator user or account |
+| `updated_at` | Last update timestamp (milliseconds since epoch) |
+| `updated_by` | Last account to update the asset |
+| `certificate_status` | Certification status (e.g., `VERIFIED`) |
+| `certificate_updated_by` | User who last updated certification |
+| `certificate_updated_at` | Certification update timestamp (milliseconds) |
+| `connector_name` | Connector type (e.g., `snowflake`, `databricks`, `tableau`) |
+| `connector_qualified_name` | Fully-qualified connection name |
+| `source_created_at` | Source system creation time (milliseconds) |
+| `source_created_by` | Source system creator |
+| `source_updated_at` | Source system update time (milliseconds) |
+| `source_updated_by` | Source system updater |
+| `owner_users` | Array of owning users |
+| `owner_groups` | Array of owning groups |
+| `term_guids` | Array of associated glossary term GUIDs |
+| `popularity_score` | Asset engagement/popularity metric |
+| `has_lineage` | Whether this asset has lineage connections |
+| `domain_guids` | Array of associated DataDomain GUIDs |
+| `product_guids` | Array of associated DataProduct GUIDs |
+| `asset_ai_generated_description` | AI-generated description |
+| `user_defined_type` | Custom entity type; NULL for native types |
+
+### RELATIONAL_ASSET_DETAILS
+
+Attributes for databases, schemas, tables, views, columns, functions, and materialized views.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`Database`, `Schema`, `Table`, `View`, `Column`, etc.) |
+| `status` | Asset status |
+| `database_name` | Database containing this asset |
+| `database_qualified_name` | Fully-qualified database name |
+| `database_schemas` | GUIDs for schemas within this database |
+| `schema_name` | Schema containing this asset |
+| `schema_qualified_name` | Fully-qualified schema name |
+| `source_read_query_cost` | Total cost of read queries at source |
+| `source_total_cost` | Total cost of all operations at source |
+| `source_cost_unit` | Cost unit (e.g., `credits`) |
+| `column_datatype` | Column data type |
+| `column_is_nullable` | Whether column values can be null |
+| `column_queries` | Queries accessing this column |
+| `column_recent_users` | Recent users who read this column |
+| `column_table_name` | Table containing this column |
+| `column_total_read_count` | Total read operation count at source |
+| `column_view_name` | View containing this column |
+| `table_columns` | GUIDs of columns within this table |
+| `table_column_count` | Number of columns in this table |
+| `table_queries` | Queries accessing this table |
+| `table_recent_users` | Recent users who read this table |
+| `table_row_count` | Number of rows |
+| `table_size_bytes` | Size in bytes |
+| `table_total_read_count` | Total read operation count at source |
+| `view_columns` | GUIDs of columns within this view |
+| `view_definition` | SQL definition of this view |
+| `view_queries` | Queries accessing this view |
+| `view_recent_users` | Recent users who read this view |
+| `view_total_read_count` | Total read operation count at source |
+| `materialised_view_columns` | GUIDs of columns within this materialized view |
+| `materialised_view_definition` | Definition of this materialized view |
+| `schema_tables` | GUIDs for tables within this schema |
+| `schema_views` | GUIDs for views within this schema |
+| `schema_materialised_views` | GUIDs for materialized views within this schema |
+| `schema_procedures` | GUIDs for stored procedures within this schema |
+| `procedure_definition` | Stored procedure definition |
+| `function_language` | Function language |
+| `function_return_type` | Function return data type |
+| `function_schema` | Schema containing this function |
+| `function_type` | Function type |
+| `query_columns` | GUIDs for columns this query accesses |
+| `query_parent` | Collection/folder containing this query |
+| `query_raw_query_text` | Raw query text |
+| `query_tables` | GUIDs for tables this query accesses |
+| `query_views` | GUIDs for views this query accesses |
+
+### GLOSSARY_DETAILS
+
+Glossary, category, and term attributes.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`Glossary`, `GlossaryTerm`, `GlossaryCategory`) |
+| `status` | Asset status |
+| `terms` | Term GUIDs belonging to this glossary/category |
+| `categories` | Category GUIDs associated with this glossary/term |
+| `assigned_entities` | Asset GUIDs to which this term has been applied |
+| `readme_guid` | Identifier for the asset's readme |
+| `anchor_guid` | GUID of the parent glossary |
+
+### DATA_QUALITY_DETAILS
+
+Data quality checks across Anomalo, Soda, Monte Carlo, and native Atlan DQ rules.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`AnomaloCheck`, `SodaCheck`, `MCMonitor`, etc.) |
+| `status` | Asset status |
+| `source_url` | Source URL for this DQ check |
+| `anomalo_check_type` | Anomalo check type |
+| `anomalo_check_status` | Most recent Anomalo check status |
+| `anomalo_check_last_run_completed_at` | Last Anomalo execution timestamp |
+| `anomalo_check_linked_asset_qualified_name` | Qualified name of associated asset |
+| `soda_check_id` | Soda check identifier |
+| `soda_check_definition` | Soda check definition |
+| `soda_check_evaluation_status` | Most recent Soda check status |
+| `soda_check_last_scan_at` | Last Soda execution timestamp |
+| `soda_check_columns` | Columns associated with this Soda check |
+| `soda_check_assets` | Assets associated with this Soda check |
+| `mc_monitor_id` | Monte Carlo monitor identifier |
+| `mc_monitor_type` | Monte Carlo monitor type |
+| `mc_monitor_status` | Most recent Monte Carlo status |
+| `mc_monitor_rule_last_execution_at` | Last Monte Carlo execution timestamp |
+| `mc_monitor_assets` | Assets associated with this Monte Carlo monitor |
+| `dq_rule_base_dataset_qualified_name` | Qualified name of dataset the rule applies to |
+| `dq_rule_base_column_qualified_name` | Qualified name of column the rule applies to |
+| `dq_rule_dimension` | Dimension (completeness, accuracy, etc.) |
+| `dq_rule_latest_result` | Latest rule execution result |
+| `dq_rule_alert_priority` | Priority level (`LOW`, `NORMAL`, `URGENT`) |
+
+### PIPELINE_DETAILS
+
+Pipeline and ETL process attributes across ADF, Airflow, dbt, Fivetran, and Matillion.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`AirflowDag`, `DbtModel`, `FivetranConnector`, etc.) |
+| `status` | Asset status |
+| `input_guids_to_processes` | Processes using this asset as an input |
+| `output_guids_from_processes` | Processes producing this asset as output |
+
+### BI_ASSET_DETAILS
+
+BI tool attributes for PowerBI, Tableau, Looker, and Sigma.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`PowerBIDashboard`, `TableauWorkbook`, `SigmaPage`, etc.) |
+| `status` | Asset status |
+| `workspace_qualified_name` | PowerBI workspace qualified name |
+| `project_qualified_name` | Tableau project qualified name |
+| `folder_name` | Looker folder display name |
+| `site_qualified_name` | Tableau site qualified name |
+
+### DATA_MESH_DETAILS
+
+Data domain and data product attributes.
+
+| Column | Description |
+|--------|-------------|
+| `guid` | Asset GUID (join to `ASSETS.guid`) |
+| `asset_type` | Type (`DataDomain`, `DataProduct`) |
+| `status` | Asset status |
+| `data_products` | GUIDs of data products within a domain |
+| `parent_domain` | GUID of parent data domain |
+| `stakeholders` | Assigned stakeholder GUIDs |
+| `subdomains` | Child data domain GUIDs |
+| `data_product_status` | Data product state |
+| `criticality` | Business importance level |
+| `sensitivity` | Data sensitivity classification |
+| `visibility` | Access/visibility scope |
+| `input_port_guids` | Input port GUIDs |
+| `output_port_guids` | Output port GUIDs |
+| `data_domain` | GUID of the containing data domain |
+| `assets_dsl` | Search definition for asset inclusion |
+| `assets_playbook_filter` | Filtering logic for product assets |
+
+### GOLD Namespace Best Practices
+
+1. **Always start from `ASSETS`**: Filter to the assets you need, then join to detail tables.
+2. **Filter early**: Apply `status = 'ACTIVE'`, `asset_type`, and `connector_name` filters before joins to minimize scanned data.
+3. **Join on `guid`**: Always join detail tables using `guid`, not asset names or qualified names.
+4. **Pair GUID lookups with `asset_type`**: Narrows the search space significantly.
+5. **Avoid functions in WHERE clauses**: Wrapping columns in `LOWER()` etc. disables query optimization.
+6. **Handle NULLs explicitly**: Use `COALESCE()` or explicit NULL checks for optional fields (owners, descriptions).
+7. **Test with `LIMIT 100`**: Validate queries before running against full datasets.
+
+### GOLD Namespace Templates
+
+#### Asset Inventory: Relational Assets with Details
 
 ```sql
-WITH cm_stats AS (
+SELECT
+    a.asset_name,
+    a.asset_type,
+    a.connector_name,
+    a.asset_qualified_name,
+    a.certificate_status,
+    a.owner_users,
+    a.description,
+    r.database_name,
+    r.schema_name,
+    r.table_row_count,
+    r.table_size_bytes,
+    r.table_column_count,
+    r.source_read_query_cost,
+    r.source_total_cost,
+    r.source_cost_unit
+FROM {{DATABASE}}.GOLD.ASSETS a
+LEFT JOIN {{DATABASE}}.GOLD.RELATIONAL_ASSET_DETAILS r ON a.guid = r.guid
+WHERE a.status = 'ACTIVE'
+  AND a.asset_type IN ('Table', 'View', 'MaterializedView')
+  AND a.connector_name = 'snowflake'  -- adjust to your connector
+ORDER BY r.table_row_count DESC NULLS LAST;
+```
+
+#### Asset Inventory: BI Assets Across Tools
+
+```sql
+SELECT
+    a.asset_name,
+    a.asset_type,
+    a.connector_name,
+    a.certificate_status,
+    a.owner_users,
+    a.description,
+    a.popularity_score,
+    b.workspace_qualified_name,
+    b.project_qualified_name,
+    b.folder_name,
+    b.site_qualified_name
+FROM {{DATABASE}}.GOLD.ASSETS a
+LEFT JOIN {{DATABASE}}.GOLD.BI_ASSET_DETAILS b ON a.guid = b.guid
+WHERE a.status = 'ACTIVE'
+  AND a.asset_type IN ('PowerBIDashboard', 'PowerBIReport', 'TableauWorkbook', 'TableauDashboard', 'LookerDashboard', 'SigmaPage')
+ORDER BY a.popularity_score DESC NULLS LAST;
+```
+
+#### Asset Inventory: Data Quality Summary
+
+```sql
+SELECT
+    a.asset_name,
+    a.asset_type,
+    a.connector_name,
+    dq.source_url,
+    COALESCE(dq.anomalo_check_status, dq.soda_check_evaluation_status, dq.mc_monitor_status, dq.dq_rule_latest_result) AS latest_status,
+    COALESCE(dq.anomalo_check_last_run_completed_at, dq.soda_check_last_scan_at, dq.mc_monitor_rule_last_execution_at) AS last_run_at,
+    dq.dq_rule_dimension,
+    dq.dq_rule_alert_priority
+FROM {{DATABASE}}.GOLD.ASSETS a
+INNER JOIN {{DATABASE}}.GOLD.DATA_QUALITY_DETAILS dq ON a.guid = dq.guid
+WHERE a.status = 'ACTIVE'
+ORDER BY dq.dq_rule_alert_priority DESC NULLS LAST, a.asset_name;
+```
+
+#### Asset Inventory: Pipeline Dependencies
+
+```sql
+SELECT
+    a.asset_name,
+    a.asset_type,
+    a.connector_name,
+    a.certificate_status,
+    a.owner_users,
+    p.input_guids_to_processes,
+    p.output_guids_from_processes
+FROM {{DATABASE}}.GOLD.ASSETS a
+INNER JOIN {{DATABASE}}.GOLD.PIPELINE_DETAILS p ON a.guid = p.guid
+WHERE a.status = 'ACTIVE'
+ORDER BY a.connector_name, a.asset_type, a.asset_name;
+```
+
+#### Metadata Completeness: Asset Enrichment Tracking (GOLD + ENTITY_METADATA Hybrid)
+
+Measures description, certification, ownership, term, tag, and custom metadata coverage by asset type. Uses `GOLD.ASSETS` for core data and joins to `ENTITY_METADATA.TAGS` and `ENTITY_METADATA.CUSTOM_METADATA` for tag and custom metadata coverage.
+
+```sql
+WITH tag_stats AS (
     SELECT
-        alt.GUID AS asset_guid,
+        t.ASSET_GUID,
+        COUNT(*) AS tag_count
+    FROM {{DATABASE}}.ENTITY_METADATA.TAGS t
+    GROUP BY t.ASSET_GUID
+),
+cm_stats AS (
+    SELECT
+        cm.ASSET_GUID,
         SUM(
             CASE
                 WHEN cm.ATTRIBUTE_VALUE IS NULL THEN 0
@@ -283,241 +626,117 @@ WITH cm_stats AS (
                 ELSE 0
             END
         ) AS linked_cm_prop_count
-    FROM ASSETS alt
-    LEFT JOIN CUSTOM_METADATA cm ON alt.GUID = cm.ASSET_GUID
-    GROUP BY alt.GUID
+    FROM {{DATABASE}}.ENTITY_METADATA.CUSTOM_METADATA cm
+    GROUP BY cm.ASSET_GUID
 ),
 entity_stats AS (
     SELECT
-        ASSET_TYPE,
+        a.asset_type,
         COUNT(*) AS total_count,
-        COUNT(CASE WHEN DESCRIPTION IS NOT NULL AND DESCRIPTION <> '' THEN 1 END) AS with_description,
-        COUNT(CASE WHEN DESCRIPTION IS NULL OR DESCRIPTION = '' THEN 1 END) AS without_description,
-        COUNT(CASE WHEN LOWER(CERTIFICATE_STATUS) = 'verified' THEN 1 END) AS certified,
-        COUNT(CASE WHEN LOWER(CERTIFICATE_STATUS) != 'verified' OR CERTIFICATE_STATUS IS NULL THEN 1 END) AS uncertified,
-        COUNT(CASE WHEN TAGS IS NOT NULL AND ARRAY_SIZE(TAGS) > 0 THEN 1 END) AS with_tags,
-        COUNT(CASE WHEN TAGS IS NULL OR ARRAY_SIZE(TAGS) = 0 THEN 1 END) AS without_tags,
-        COUNT(CASE WHEN OWNER_USERS IS NOT NULL AND ARRAY_SIZE(OWNER_USERS) > 0 THEN 1 END) AS with_owners,
-        COUNT(CASE WHEN OWNER_USERS IS NULL OR ARRAY_SIZE(OWNER_USERS) = 0 THEN 1 END) AS without_owners,
-        COUNT(CASE WHEN linked_cm_prop_count > 0 THEN 1 END) AS with_linked_cm_props,
-        COUNT(CASE WHEN linked_cm_prop_count = 0 OR linked_cm_prop_count IS NULL THEN 1 END) AS without_linked_cm_props
-    FROM ASSETS alt
-    LEFT JOIN cm_stats cm ON alt.GUID = cm.asset_guid
-    WHERE ASSET_TYPE IN ('Table', 'Schema', 'TableauDashboard', 'TableauWorkbook',
-                         'DataDomain', 'DataProduct', 'AtlasGlossaryTerm',
-                         'AtlasGlossaryCategory', 'AtlasGlossary')
-    GROUP BY ASSET_TYPE
+        COUNT(CASE WHEN a.description IS NOT NULL AND a.description <> '' THEN 1 END) AS with_description,
+        COUNT(CASE WHEN LOWER(a.certificate_status) = 'verified' THEN 1 END) AS certified,
+        COUNT(CASE WHEN a.owner_users IS NOT NULL AND ARRAY_SIZE(a.owner_users) > 0 THEN 1 END) AS with_owners,
+        COUNT(CASE WHEN a.term_guids IS NOT NULL AND ARRAY_SIZE(a.term_guids) > 0 THEN 1 END) AS with_terms,
+        COUNT(CASE WHEN ts.tag_count > 0 THEN 1 END) AS with_tags,
+        COUNT(CASE WHEN cm.linked_cm_prop_count > 0 THEN 1 END) AS with_linked_cm_props
+    FROM {{DATABASE}}.GOLD.ASSETS a
+    LEFT JOIN tag_stats ts ON a.guid = ts.ASSET_GUID
+    LEFT JOIN cm_stats cm ON a.guid = cm.ASSET_GUID
+    WHERE a.status = 'ACTIVE'
+      AND a.asset_type IN ('Table', 'Schema', 'TableauDashboard', 'TableauWorkbook',
+                           'DataDomain', 'DataProduct', 'AtlasGlossaryTerm',
+                           'AtlasGlossaryCategory', 'AtlasGlossary')
+    GROUP BY a.asset_type
 )
 SELECT
-    ASSET_TYPE, total_count,
-    with_description, without_description,
+    asset_type, total_count,
+    with_description,
     ROUND((with_description * 100.0) / NULLIF(total_count, 0), 2) AS description_coverage_pct,
-    with_tags, without_tags,
+    with_tags,
     ROUND((with_tags * 100.0) / NULLIF(total_count, 0), 2) AS tag_coverage_pct,
-    certified, uncertified,
+    certified,
     ROUND((certified * 100.0) / NULLIF(total_count, 0), 2) AS certification_coverage_pct,
-    with_owners, without_owners,
+    with_owners,
     ROUND((with_owners * 100.0) / NULLIF(total_count, 0), 2) AS ownership_coverage_pct,
-    with_linked_cm_props, without_linked_cm_props,
+    with_terms,
+    ROUND((with_terms * 100.0) / NULLIF(total_count, 0), 2) AS term_coverage_pct,
+    with_linked_cm_props,
     ROUND((with_linked_cm_props * 100.0) / NULLIF(total_count, 0), 2) AS custom_metadata_coverage_pct
 FROM entity_stats
-ORDER BY ASSET_TYPE;
+ORDER BY asset_type;
 ```
 
-### Metadata Completeness: By Data Domain
+#### Metadata Completeness: By Data Domain (GOLD)
 
 Domain-level enrichment statistics with an overall enrichment score.
 
 ```sql
-WITH domains AS (
-    SELECT a.GUID AS domain_guid, a.ASSET_NAME AS domain_name
-    FROM ASSETS a
-    WHERE a.ASSET_TYPE = 'DataDomain' AND a.STATUS = 'ACTIVE'
-),
-assets_with_enrichment AS (
+WITH assets_with_enrichment AS (
     SELECT
-        COALESCE(d.domain_guid, 'UNASSIGNED') AS domain_guid,
-        COALESCE(d.domain_name, 'No Domain Assigned') AS domain_name,
-        a.GUID AS asset_guid,
-        a.ASSET_NAME, a.ASSET_TYPE,
-        CASE WHEN a.TAGS IS NOT NULL AND ARRAY_SIZE(a.TAGS) > 0 THEN 1 ELSE 0 END AS has_tags,
-        CASE WHEN a.TERM_GUIDS IS NOT NULL AND ARRAY_SIZE(a.TERM_GUIDS) > 0 THEN 1 ELSE 0 END AS has_terms,
-        CASE WHEN a.README_GUID IS NOT NULL THEN 1 ELSE 0 END AS has_readme,
-        CASE WHEN a.DESCRIPTION IS NOT NULL AND LENGTH(TRIM(a.DESCRIPTION)) > 0 THEN 1 ELSE 0 END AS has_description
-    FROM ASSETS a
-    LEFT JOIN DATA_MESH_DETAILS dmd ON a.GUID = dmd.GUID
-    LEFT JOIN domains d ON dmd.DATA_DOMAIN = d.domain_guid
-    WHERE a.STATUS = 'ACTIVE'
+        COALESCE(d_assets.asset_name, 'No Domain Assigned') AS domain_name,
+        a.guid AS asset_guid,
+        a.asset_name, a.asset_type,
+        CASE WHEN a.term_guids IS NOT NULL AND ARRAY_SIZE(a.term_guids) > 0 THEN 1 ELSE 0 END AS has_terms,
+        CASE WHEN a.readme_guid IS NOT NULL THEN 1 ELSE 0 END AS has_readme,
+        CASE WHEN a.description IS NOT NULL AND LENGTH(TRIM(a.description)) > 0 THEN 1 ELSE 0 END AS has_description
+    FROM {{DATABASE}}.GOLD.ASSETS a
+    LEFT JOIN {{DATABASE}}.GOLD.DATA_MESH_DETAILS dmd ON a.guid = dmd.guid
+    LEFT JOIN {{DATABASE}}.GOLD.ASSETS d_assets ON dmd.data_domain = d_assets.guid
+    WHERE a.status = 'ACTIVE'
 )
 SELECT
-    domain_name, domain_guid,
+    domain_name,
     COUNT(*) AS total_assets,
-    SUM(has_tags) AS assets_with_tags,
-    ROUND((SUM(has_tags) * 100.0) / NULLIF(COUNT(*), 0), 2) AS pct_with_tags,
     SUM(has_terms) AS assets_with_terms,
     ROUND((SUM(has_terms) * 100.0) / NULLIF(COUNT(*), 0), 2) AS pct_with_terms,
     SUM(has_readme) AS assets_with_readme,
     ROUND((SUM(has_readme) * 100.0) / NULLIF(COUNT(*), 0), 2) AS pct_with_readme,
     SUM(has_description) AS assets_with_description,
     ROUND((SUM(has_description) * 100.0) / NULLIF(COUNT(*), 0), 2) AS pct_with_description,
-    ROUND(((SUM(has_tags) * 100.0) / NULLIF(COUNT(*), 0) + (SUM(has_terms) * 100.0) / NULLIF(COUNT(*), 0)
-         + (SUM(has_readme) * 100.0) / NULLIF(COUNT(*), 0) + (SUM(has_description) * 100.0) / NULLIF(COUNT(*), 0)) / 4.0, 2
+    ROUND(((SUM(has_terms) * 100.0) / NULLIF(COUNT(*), 0)
+         + (SUM(has_readme) * 100.0) / NULLIF(COUNT(*), 0)
+         + (SUM(has_description) * 100.0) / NULLIF(COUNT(*), 0)) / 3.0, 2
     ) AS overall_enrichment_score
 FROM assets_with_enrichment
-GROUP BY domain_name, domain_guid
-ORDER BY CASE WHEN domain_guid = 'UNASSIGNED' THEN 1 ELSE 0 END, overall_enrichment_score DESC;
+GROUP BY domain_name
+ORDER BY CASE WHEN domain_name = 'No Domain Assigned' THEN 1 ELSE 0 END, overall_enrichment_score DESC;
 ```
 
-### Lineage: Assets Without Lineage
+#### Glossary: Comprehensive Term Export (GOLD)
 
-Identifies active data assets with no lineage connections. Includes cleanup recommendations.
-
-```sql
-SELECT
-    A.GUID, A.ASSET_NAME, A.ASSET_TYPE, A.ASSET_QUALIFIED_NAME, A.CONNECTOR_NAME,
-    A.DESCRIPTION, A.CERTIFICATE_STATUS, A.STATUS, A.OWNER_USERS, A.TAGS, A.HAS_LINEAGE,
-    TO_TIMESTAMP_LTZ(A.CREATED_AT / 1000) AS CREATED_DATE,
-    TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000) AS LAST_UPDATED,
-    DATEDIFF(day, TO_TIMESTAMP_LTZ(A.CREATED_AT / 1000), CURRENT_TIMESTAMP()) AS DAYS_SINCE_CREATION,
-    DATEDIFF(day, TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000), CURRENT_TIMESTAMP()) AS DAYS_SINCE_UPDATE,
-    CASE
-        WHEN A.CERTIFICATE_STATUS = 'DEPRECATED' THEN 'SAFE TO DELETE - Already deprecated'
-        WHEN DATEDIFF(day, TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000), CURRENT_TIMESTAMP()) > 180 AND A.STATUS = 'ACTIVE' THEN 'REVIEW FOR DELETION - No activity in 6+ months'
-        WHEN DATEDIFF(day, TO_TIMESTAMP_LTZ(A.CREATED_AT / 1000), CURRENT_TIMESTAMP()) <= 7 THEN 'KEEP - Recently created, may not be connected yet'
-        WHEN A.OWNER_USERS IS NULL THEN 'INVESTIGATE - No owner, likely test/temp asset'
-        ELSE 'REVIEW - May be intentionally standalone'
-    END AS CLEANUP_RECOMMENDATION
-FROM ASSETS A
-WHERE A.HAS_LINEAGE = FALSE
-    AND A.ASSET_TYPE IN ('Table', 'View', 'MaterializedView')
-    AND A.STATUS = 'ACTIVE'
-    AND DATEDIFF(day, TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000), CURRENT_TIMESTAMP()) > 90
-ORDER BY DAYS_SINCE_UPDATE DESC, A.ASSET_NAME;
-```
-
-### Lineage: Circular Dependencies
-
-Detects assets with circular lineage where data flows back to itself.
-
-```sql
-SELECT
-    A.GUID AS ASSET_GUID, A.ASSET_NAME, A.ASSET_TYPE,
-    A.ASSET_QUALIFIED_NAME AS ASSET_PATH, A.CONNECTOR_NAME,
-    A.OWNER_USERS, A.CERTIFICATE_STATUS,
-    TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000) AS LAST_UPDATED,
-    L.DIRECTION AS LINEAGE_DIRECTION,
-    L.LEVEL AS CIRCULAR_PATH_LENGTH,
-    L.RELATED_NAME AS RELATED_ASSET_NAME,
-    L.RELATED_TYPE AS RELATED_ASSET_TYPE,
-    CASE
-        WHEN L.LEVEL = 1 THEN 'DIRECT SELF-REFERENCE - Review immediately'
-        WHEN L.LEVEL <= 3 THEN 'SHORT CIRCULAR PATH - May cause performance issues'
-        ELSE 'LONG CIRCULAR PATH - Complex dependency chain'
-    END AS CIRCULAR_DEPENDENCY_SEVERITY
-FROM ASSETS A
-INNER JOIN LINEAGE L ON A.GUID = L.START_GUID
-WHERE L.RELATED_GUID = A.GUID
-    AND A.ASSET_TYPE IN ('Table', 'View', 'MaterializedView', 'DbtModel')
-    AND A.STATUS = 'ACTIVE'
-ORDER BY L.LEVEL ASC, A.ASSET_NAME;
-```
-
-### Lineage: Overall Coverage Summary
-
-High-level dashboard view of lineage coverage.
-
-```sql
-SELECT
-    COUNT(*) AS TOTAL_ASSETS,
-    SUM(CASE WHEN HAS_LINEAGE = TRUE THEN 1 ELSE 0 END) AS ASSETS_WITH_LINEAGE,
-    SUM(CASE WHEN HAS_LINEAGE = FALSE THEN 1 ELSE 0 END) AS ASSETS_WITHOUT_LINEAGE,
-    ROUND((SUM(CASE WHEN HAS_LINEAGE = TRUE THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS LINEAGE_COVERAGE_PCT
-FROM ASSETS
-WHERE STATUS = 'ACTIVE';
-```
-
-### Lineage: Coverage by Connector
-
-Compare lineage coverage across different data platforms.
-
-```sql
-SELECT
-    CONNECTOR_NAME, ASSET_TYPE,
-    COUNT(*) AS TOTAL_ASSETS,
-    SUM(CASE WHEN HAS_LINEAGE = TRUE THEN 1 ELSE 0 END) AS WITH_LINEAGE,
-    SUM(CASE WHEN HAS_LINEAGE = FALSE THEN 1 ELSE 0 END) AS WITHOUT_LINEAGE,
-    ROUND((SUM(CASE WHEN HAS_LINEAGE = TRUE THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS LINEAGE_COVERAGE_PCT
-FROM ASSETS
-WHERE STATUS = 'ACTIVE' AND NULLIF(CONNECTOR_NAME, '') IS NOT NULL
-GROUP BY CONNECTOR_NAME, ASSET_TYPE
-ORDER BY CONNECTOR_NAME, LINEAGE_COVERAGE_PCT DESC, TOTAL_ASSETS DESC;
-```
-
-### Lineage: Most Connected Assets (Hubs)
-
-Identifies hub tables with the highest upstream/downstream connections. Classifies criticality.
-
-```sql
-SELECT
-    A.ASSET_NAME, A.ASSET_TYPE, A.ASSET_QUALIFIED_NAME, A.CONNECTOR_NAME,
-    A.CERTIFICATE_STATUS, A.OWNER_USERS,
-    TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000) AS LAST_UPDATED,
-    DATEDIFF(day, TO_TIMESTAMP_LTZ(A.UPDATED_AT / 1000), CURRENT_TIMESTAMP()) AS DAYS_SINCE_UPDATE,
-    COUNT(CASE WHEN L.DIRECTION = 'UPSTREAM' AND L.LEVEL = 1 THEN 1 END) AS UPSTREAM_COUNT,
-    COUNT(CASE WHEN L.DIRECTION = 'DOWNSTREAM' AND L.LEVEL = 1 THEN 1 END) AS DOWNSTREAM_COUNT,
-    COUNT(CASE WHEN L.LEVEL = 1 THEN 1 END) AS TOTAL_CONNECTIONS,
-    CASE
-        WHEN COUNT(CASE WHEN L.DIRECTION = 'DOWNSTREAM' AND L.LEVEL = 1 THEN 1 END) >= 20 THEN 'CRITICAL - 20+ downstream dependencies'
-        WHEN COUNT(CASE WHEN L.DIRECTION = 'DOWNSTREAM' AND L.LEVEL = 1 THEN 1 END) >= 10 THEN 'HIGH IMPACT - 10-19 downstream dependencies'
-        WHEN COUNT(CASE WHEN L.DIRECTION = 'DOWNSTREAM' AND L.LEVEL = 1 THEN 1 END) >= 5 THEN 'MODERATE IMPACT - 5-9 downstream dependencies'
-        ELSE 'LOW IMPACT - <5 downstream dependencies'
-    END AS CRITICALITY_LEVEL
-FROM ASSETS A
-LEFT JOIN LINEAGE L ON A.GUID = L.START_GUID
-WHERE A.HAS_LINEAGE = TRUE
-    AND A.ASSET_TYPE IN ('Table', 'View', 'MaterializedView')
-    AND A.STATUS = 'ACTIVE'
-GROUP BY A.ASSET_NAME, A.ASSET_TYPE, A.ASSET_QUALIFIED_NAME, A.CONNECTOR_NAME, A.CERTIFICATE_STATUS, A.OWNER_USERS, A.UPDATED_AT
-HAVING COUNT(CASE WHEN L.LEVEL = 1 THEN 1 END) > 0
-ORDER BY TOTAL_CONNECTIONS DESC;
-```
-
-### Glossary: Comprehensive Term Export
-
-Retrieves glossary terms with parent glossary, categories, readme descriptions, and assigned entity details.
+Retrieves glossary terms with parent glossary, categories, and assigned entity details using GOLD tables.
 
 ```sql
 WITH glossary_terms AS (
     SELECT
-        t.GUID AS term_guid, t.NAME AS term_name, t.QUALIFIED_NAME AS term_qualified_name,
-        t.DESCRIPTION AS term_description, t.STATUS AS term_status,
-        t.CERTIFICATE_STATUS AS term_certificate_status, t.OWNER_USERS AS term_owner_users,
-        TO_TIMESTAMP_LTZ(t.CREATED_TIME / 1000) AS term_created_at,
-        TO_TIMESTAMP_LTZ(t.UPDATED_TIME / 1000) AS term_updated_at,
-        t.CREATED_BY AS term_created_by, t.UPDATED_BY AS term_updated_by,
-        t.ANCHOR_GUID AS glossary_guid,
-        t.CATEGORIES AS term_categories,
-        t.README_GUID AS term_readme_guid,
-        t.ASSIGNED_ENTITIES AS term_assigned_entities
-    FROM GLOSSARY_DETAILS t
-    WHERE t.ASSET_TYPE = 'AtlasGlossaryTerm' AND t.STATUS = 'ACTIVE'
+        a.guid AS term_guid, a.asset_name AS term_name, a.asset_qualified_name AS term_qualified_name,
+        a.description AS term_description, a.status AS term_status,
+        a.certificate_status AS term_certificate_status, a.owner_users AS term_owner_users,
+        TO_TIMESTAMP_LTZ(a.created_at / 1000) AS term_created_at,
+        TO_TIMESTAMP_LTZ(a.updated_at / 1000) AS term_updated_at,
+        a.created_by AS term_created_by, a.updated_by AS term_updated_by,
+        g.anchor_guid AS glossary_guid,
+        g.categories AS term_categories,
+        a.readme_guid AS term_readme_guid,
+        g.assigned_entities AS term_assigned_entities
+    FROM {{DATABASE}}.GOLD.ASSETS a
+    INNER JOIN {{DATABASE}}.GOLD.GLOSSARY_DETAILS g ON a.guid = g.guid
+    WHERE a.asset_type = 'AtlasGlossaryTerm' AND a.status = 'ACTIVE'
 ),
 glossary_info AS (
-    SELECT g.GUID AS glossary_guid, g.NAME AS glossary_name,
-           g.QUALIFIED_NAME AS glossary_qualified_name, g.DESCRIPTION AS glossary_description,
-           g.CERTIFICATE_STATUS AS glossary_certificate_status, g.OWNER_USERS AS glossary_owner_users
-    FROM GLOSSARY_DETAILS g
-    WHERE g.ASSET_TYPE = 'AtlasGlossary' AND g.STATUS = 'ACTIVE'
+    SELECT a.guid AS glossary_guid, a.asset_name AS glossary_name,
+           a.asset_qualified_name AS glossary_qualified_name, a.description AS glossary_description,
+           a.certificate_status AS glossary_certificate_status, a.owner_users AS glossary_owner_users
+    FROM {{DATABASE}}.GOLD.ASSETS a
+    INNER JOIN {{DATABASE}}.GOLD.GLOSSARY_DETAILS g ON a.guid = g.guid
+    WHERE a.asset_type = 'AtlasGlossary' AND a.status = 'ACTIVE'
 ),
 category_info AS (
-    SELECT c.GUID AS category_guid, c.NAME AS category_name,
-           c.QUALIFIED_NAME AS category_qualified_name, c.DESCRIPTION AS category_description
-    FROM GLOSSARY_DETAILS c
-    WHERE c.ASSET_TYPE = 'AtlasGlossaryCategory' AND c.STATUS = 'ACTIVE'
-),
-readme_info AS (
-    SELECT r.GUID AS readme_guid, r.DESCRIPTION AS readme_description
-    FROM README r WHERE r.STATUS = 'ACTIVE'
+    SELECT a.guid AS category_guid, a.asset_name AS category_name,
+           a.asset_qualified_name AS category_qualified_name, a.description AS category_description
+    FROM {{DATABASE}}.GOLD.ASSETS a
+    INNER JOIN {{DATABASE}}.GOLD.GLOSSARY_DETAILS g ON a.guid = g.guid
+    WHERE a.asset_type = 'AtlasGlossaryCategory' AND a.status = 'ACTIVE'
 ),
 term_categories_expanded AS (
     SELECT t.term_guid, cat_flat.VALUE::STRING AS category_guid
@@ -530,10 +749,10 @@ term_assigned_assets AS (
     WHERE t.term_assigned_entities IS NOT NULL
 ),
 asset_details AS (
-    SELECT taa.term_guid, a.GUID AS asset_guid, a.ASSET_NAME, a.ASSET_QUALIFIED_NAME, a.ASSET_TYPE
+    SELECT taa.term_guid, a.guid AS asset_guid, a.asset_name, a.asset_qualified_name, a.asset_type
     FROM term_assigned_assets taa
-    INNER JOIN ASSETS a ON a.GUID = taa.asset_guid
-    WHERE a.STATUS = 'ACTIVE'
+    INNER JOIN {{DATABASE}}.GOLD.ASSETS a ON a.guid = taa.asset_guid
+    WHERE a.status = 'ACTIVE'
 )
 SELECT
     t.term_guid, t.term_name, t.term_qualified_name, t.term_description,
@@ -542,17 +761,15 @@ SELECT
     DATEDIFF(day, t.term_updated_at, CURRENT_TIMESTAMP()) AS days_since_update,
     g.glossary_guid, g.glossary_name, g.glossary_qualified_name, g.glossary_description,
     g.glossary_certificate_status, g.glossary_owner_users,
-    t.term_readme_guid, r.readme_description AS term_readme_description,
     ARRAY_AGG(DISTINCT c.category_guid) AS category_guids,
     ARRAY_AGG(DISTINCT c.category_name) AS category_names,
     COUNT(DISTINCT c.category_guid) AS category_count,
     ARRAY_AGG(DISTINCT ad.asset_guid) AS assigned_asset_guids,
-    ARRAY_AGG(DISTINCT ad.ASSET_NAME) AS assigned_asset_names,
-    ARRAY_AGG(DISTINCT ad.ASSET_TYPE) AS assigned_asset_types,
+    ARRAY_AGG(DISTINCT ad.asset_name) AS assigned_asset_names,
+    ARRAY_AGG(DISTINCT ad.asset_type) AS assigned_asset_types,
     COUNT(DISTINCT ad.asset_guid) AS assigned_asset_count
 FROM glossary_terms t
 LEFT JOIN glossary_info g ON g.glossary_guid = t.glossary_guid
-LEFT JOIN readme_info r ON r.readme_guid = t.term_readme_guid
 LEFT JOIN term_categories_expanded tce ON tce.term_guid = t.term_guid
 LEFT JOIN category_info c ON c.category_guid = tce.category_guid
 LEFT JOIN asset_details ad ON ad.term_guid = t.term_guid
@@ -560,10 +777,21 @@ GROUP BY t.term_guid, t.term_name, t.term_qualified_name, t.term_description,
          t.term_status, t.term_certificate_status, t.term_owner_users,
          t.term_created_at, t.term_updated_at, t.term_created_by, t.term_updated_by,
          g.glossary_guid, g.glossary_name, g.glossary_qualified_name, g.glossary_description,
-         g.glossary_certificate_status, g.glossary_owner_users,
-         t.term_readme_guid, r.readme_description
+         g.glossary_certificate_status, g.glossary_owner_users
 ORDER BY g.glossary_name, t.term_name;
 ```
+
+---
+
+## Entity Metadata Templates
+
+> **For most asset metadata queries, prefer the GOLD namespace (above) which provides simpler, pre-joined tables.** Use `ENTITY_METADATA` directly when you need: tags (`TAGS` table), custom metadata (`CUSTOM_METADATA` table), readmes (`README` table), lineage (`PROCESS` / `COLUMN_PROCESS` / `BI_PROCESS` tables), or per-type tables not covered by GOLD.
+
+These query the `ENTITY_METADATA` namespace. Key relationship/consolidated tables include `TAGS`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, `DATA_MESH_DETAILS`, and lineage process tables (`PROCESS`, `COLUMN_PROCESS`, `BI_PROCESS`). Asset data lives in **per-type tables** (e.g., `TABLE`, `COLUMN`, `VIEW`, `DBTMODEL`, `GLOSSARYTERM`). Use `catalog.list_tables("ENTITY_METADATA")` or `SHOW TABLES IN <db>.ENTITY_METADATA` to discover the full set.
+
+> **Supertype tables have 0 rows.** Atlan's metamodel uses a type hierarchy. Abstract supertype tables like `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`, `NOSQL`, `OBJECTSTORE`, `CATALOG`, `INFRASTRUCTURE`, and `EVENTSTORE` exist in the namespace but contain no data — they are structural parents only. Always query the concrete type table instead (e.g., `TABLE` not `ASSET`, `SNOWFLAKE` not `SQL`). Similarly, tables for unused connectors (e.g., `AIRFLOWDAG` on a tenant that does not use Airflow) will have 0 rows. When building cross-type queries, `UNION ALL` across the specific type tables you need rather than querying a supertype.
+
+> **Note:** The metadata completeness and glossary templates have been moved to the GOLD Namespace Templates section above, which provides simpler, pre-joined queries. Lineage query templates will be added in a future update using the `PROCESS`, `COLUMN_PROCESS`, and `BI_PROCESS` tables. In the meantime, you can use `GOLD.ASSETS.has_lineage` to check lineage coverage without joining process tables.
 
 ---
 
