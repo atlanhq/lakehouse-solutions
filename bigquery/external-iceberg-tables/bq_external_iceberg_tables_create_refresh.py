@@ -1,5 +1,7 @@
 import os
 import sys
+import time
+import random
 import logging
 from typing import List, Tuple
 
@@ -167,34 +169,46 @@ def main():
             tables = reader.list_tables(namespace)
 
             for identifier in tables:
-                try:
-                    table = reader.catalog.load_table(identifier)
-                    metadata_path = get_metadata_path(table)
-                    original_table_name = identifier[-1]
-                    # Apply BigQuery-safe transformation (handle reserved keyword "table")
-                    table_name = bq_safe_table_name(original_table_name)
+                for attempt in range(5):
+                    try:
+                        table = reader.catalog.load_table(identifier)
+                        metadata_path = get_metadata_path(table)
+                        original_table_name = identifier[-1]
 
-                    create_external_iceberg_table(
-                        bq_client,
-                        dataset_id,
-                        table_name,
-                        metadata_path
-                    )
+                        # Apply BigQuery-safe transformation (handle reserved keyword "table")
+                        table_name = bq_safe_table_name(original_table_name)
 
-                    if original_table_name != table_name:
-                        logger.info(
-                            f"✅ Created {dataset_id}.{table_name} (renamed from {original_table_name} to avoid reserved keyword)"
-                        )
-                    else:
-                        logger.info(
-                            f"✅ Created {dataset_id}.{table_name}"
+                        create_external_iceberg_table(
+                            bq_client,
+                            dataset_id,
+                            table_name,
+                            metadata_path
                         )
 
-                except Exception as table_err:
-                    logger.error(
-                        f"❌ Failed table {identifier}: {table_err}"
-                    )
-                    continue
+                        if original_table_name != table_name:
+                            logger.info(
+                                f"✅ Created {dataset_id}.{table_name} (renamed from {original_table_name} to avoid reserved keyword)"
+                            )
+                        else:
+                            logger.info(
+                                f"✅ Created {dataset_id}.{table_name}"
+                            )
+
+                        break  # success — exit retry loop
+
+                    except Exception as table_err:
+                        if "quota_exceeded" in str(table_err) and attempt < 4:
+                            wait = (2 ** attempt) + random.uniform(0, 1)
+                            logger.warning(
+                                f"⏳ STS throttled on {identifier}, retrying in {wait:.1f}s "
+                                f"(attempt {attempt + 1}/5)"
+                            )
+                            time.sleep(wait)
+                        else:
+                            logger.error(
+                                f"❌ Failed table {identifier}: {table_err}"
+                            )
+                            break
 
         except Exception as ns_err:
             logger.error(
