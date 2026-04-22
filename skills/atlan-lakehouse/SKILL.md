@@ -5,15 +5,16 @@ description: >
   build reports on assets/glossaries/tags/user adoption, or analyze metadata from the lakehouse.
   Works across platforms: Snowflake (Cortex Code), Databricks (Genie Code), and Python (PyIceberg).
   Includes the GOLD namespace (curated, pre-joined star-schema tables for simplified asset metadata queries),
-  plus SQL template library for metadata completeness, glossary export,
+  plus SQL template library for metadata completeness, metadata export, glossary export,
+  lineage analysis (impact analysis, root cause analysis, coverage, hub identification, dashboard impact, tag propagation),
   and comprehensive usage analytics (active users, feature adoption, engagement, retention, health scoring).
 license: Apache-2.0
 compatibility: SQL (Snowflake, Databricks), Python 3.9+ with PyIceberg
 metadata:
   author: atlan-platform-team
-  version: "1.0.0"
+  version: "1.1.0"
   category: data-integration
-  keywords: atlan-lakehouse, iceberg, polaris, pyiceberg, analytics, usage-analytics, snowflake, cortex, databricks, genie, lineage, glossary, metadata-completeness, gold-namespace
+  keywords: atlan-lakehouse, iceberg, polaris, pyiceberg, analytics, usage-analytics, snowflake, cortex, databricks, genie, lineage, lineage-impact, lineage-root-cause, lineage-export, lineage-tags, lineage-hubs, downstream-dashboards, metadata-export, metadata-completeness, glossary, gold-namespace, data-governance
 ---
 
 # Atlan Lakehouse Skill
@@ -79,8 +80,19 @@ Activate this skill when:
 - User wants simplified asset metadata queries using pre-joined tables (GOLD namespace)
 - User needs cross-type asset reports spanning relational, BI, pipeline, DQ, glossary, or data mesh assets
 - User needs to assess metadata completeness, tag/description/owner coverage
+- User needs to export asset metadata for AI applications, data marketplaces, or reverse sync workflows
 - User needs to export and analyze glossary terms with categories and assigned entities
 - User wants to track historical metadata changes or generate audit trails
+- **Lineage use cases** — any of:
+  - Find orphaned/unused assets with no lineage (cleanup candidates)
+  - Detect circular dependencies in the data pipeline
+  - Calculate lineage coverage percentages (overall or by connector)
+  - Identify the most connected "hub" assets with the highest blast radius
+  - Export the full lineage graph for impact analysis or post-deployment validation
+  - Perform impact analysis before modifying a table — find all downstream dependencies
+  - Perform root cause analysis — trace data quality issues back upstream
+  - Find all BI dashboards (Tableau, Power BI, Looker, etc.) downstream of a source table
+  - Measure tag/governance label propagation across lineage hops
 - User wants to analyze product adoption: DAU/WAU/MAU, feature engagement, retention, or engagement depth
 - User wants to build usage dashboards or customer health scorecards
 - User wants to identify churned/reactivated users, power users, or engagement tiers
@@ -111,7 +123,7 @@ After determining your platform, choose the right namespace for the query. Follo
 1. **Asset metadata** (completeness, ownership, descriptions, certification, asset inventory, glossary, DQ checks, pipelines, BI assets, data mesh)?
    → **Start with the `GOLD` namespace.** Use `GOLD.ASSETS` as the hub table, join to detail tables as needed.
 
-2. **Asset metadata + tags, custom metadata, readmes, or lineage?**
+2. **Asset metadata + tags, custom metadata, readmes, lineage, or metadata export?**
    → **Hybrid approach:** Start from `GOLD.ASSETS` for core asset data, then join to `ENTITY_METADATA` tables for what GOLD doesn't have:
    - `ENTITY_METADATA.TAGS` — classification tags on assets
    - `ENTITY_METADATA.CUSTOM_METADATA` — custom metadata attributes
@@ -119,13 +131,16 @@ After determining your platform, choose the right namespace for the query. Follo
    - `ENTITY_METADATA.PROCESS` / `COLUMN_PROCESS` / `BI_PROCESS` — lineage relationships
    - Use `ENTITY_METADATA` directly if GOLD adds no value for the specific query.
 
-3. **Usage analytics** (DAU/WAU/MAU, feature adoption, engagement, retention, health scoring)?
+3. **Lineage analysis** (impact, root cause, coverage, hub assets, tag propagation, downstream dashboards)?
+   → **Hybrid approach:** Use `GOLD.ASSETS` joined to the customer-managed `LINEAGE` table (created separately — see [Set up lineage tables](https://docs.atlan.com/platform/lakehouse/references/set-up-lineage-tables)). The `LINEAGE` table columns are: `start_guid`, `start_name`, `start_type`, `related_guid`, `related_name`, `related_type`, `direction` (`UPSTREAM`/`DOWNSTREAM`), `level` (hop depth).
+
+4. **Usage analytics** (DAU/WAU/MAU, feature adoption, engagement, retention, health scoring)?
    → **`USAGE_ANALYTICS` namespace** (`PAGES`, `TRACKS`, `USERS`).
 
-4. **Job/pipeline health** (DQ scores, job success rates, pipeline duration)?
+5. **Job/pipeline health** (DQ scores, job success rates, pipeline duration)?
    → **`OBSERVABILITY` namespace** (`JOB_METRICS`).
 
-5. **Historical/temporal changes** (audit trails, point-in-time snapshots)?
+6. **Historical/temporal changes** (audit trails, point-in-time snapshots)?
    → **`ENTITY_HISTORY` namespace** (mirrors `ENTITY_METADATA` with `snapshot_timestamp` / `snapshot_date`).
 
 ## Connecting to the Atlan Lakehouse
@@ -316,7 +331,9 @@ Detailed schemas, conventions, and SQL templates are organized in the `reference
 | Reference | Description |
 |-----------|-------------|
 | [GOLD Namespace Schema](references/gold-namespace-schema.md) | Complete column-level schema for all GOLD tables (ASSETS, RELATIONAL_ASSET_DETAILS, GLOSSARY_DETAILS, DATA_QUALITY_DETAILS, PIPELINE_DETAILS, BI_ASSET_DETAILS, DATA_MESH_DETAILS) plus best practices |
-| [GOLD Namespace Templates](references/gold-namespace-templates.md) | SQL templates for asset inventory, metadata completeness, glossary export using GOLD tables |
+| [GOLD Namespace Templates](references/gold-namespace-templates.md) | SQL templates for asset inventory, metadata completeness, and glossary export using GOLD tables |
+| [Lineage Templates](references/lineage-templates.md) | SQL templates for all lineage use cases: assets without lineage, circular dependencies, coverage summary, lineage hub identification, full export, impact analysis, root cause analysis, downstream dashboard impact, and tag propagation across systems (Snowflake, Databricks, BigQuery) |
+| [Metadata Export Templates](references/metadata-export-templates.md) | SQL templates for exporting asset metadata to data marketplaces, AI applications, and reverse sync workflows — including basic export and custom metadata enrichment (Snowflake, Databricks, BigQuery) |
 | [Entity Metadata Reference](references/entity-metadata-reference.md) | ENTITY_METADATA namespace guide: supertype vs concrete tables, relationship tables, discovery |
 | [Usage Analytics Conventions](references/usage-analytics-conventions.md) | Critical conventions for usage analytics queries: domain handling, identity, noise filtering, session derivation, timezone, feature area mapping |
 | [Usage Analytics Templates](references/usage-analytics-templates.md) | SQL templates for schema profiling, active users (DAU/WAU/MAU), feature adoption, engagement depth, retention, and customer health scoring |
