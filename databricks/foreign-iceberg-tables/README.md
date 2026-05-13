@@ -1,6 +1,6 @@
 # Databricks Foreign Iceberg Tables
 
-Databricks does not currently support querying federated (external) Iceberg REST catalogs natively. These scripts provide a workaround by creating "foreign" Iceberg table references in Unity Catalog that point directly to the Atlan Lakehouse Iceberg metadata files stored in cloud object storage (Amazon S3 or ADLS).
+Databricks does not currently support querying federated (external) Iceberg REST catalogs natively. These scripts provide a workaround by creating "foreign" Iceberg table references in Unity Catalog that point directly to the Atlan Lakehouse Iceberg metadata files stored in cloud object storage (Amazon S3, ADLS, or GCS).
 
 Two scripts are provided:
 
@@ -36,6 +36,7 @@ Follow the guide that matches where your **Atlan Lakehouse storage** is hosted:
 |---|---|---|
 | **AWS (S3)** | AWS or Azure | [SETUP_AWS_S3.md](SETUP_AWS_S3.md) |
 | **Azure (ADLS)** | Azure | [SETUP_AZURE_ADLS.md](SETUP_AZURE_ADLS.md) |
+| **GCP (GCS)** | GCP | [SETUP_GCP_GCS.md](SETUP_GCP_GCS.md) |
 
 > **Not sure?** Ask Atlan Support — they will confirm which storage backend your Lakehouse uses.
 
