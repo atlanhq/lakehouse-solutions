@@ -1,6 +1,19 @@
 MDLH GOLD Layer – Snowflake SQL Setup Guide
 =======================================
 
+> ## DEPRECATION NOTICE
+>
+> **This compute-side GOLD layer setup is deprecated.**
+>
+> Atlan now provides the **GOLD namespace natively within the lakehouse itself** — you no longer need to create or maintain the GOLD layer on your Snowflake environment.
+>
+> Please refer to the official documentation:
+> [What is the Gold Layer?](https://docs.atlan.com/platform/lakehouse/concepts/what-is-gold-layer)
+>
+> The instructions below are retained for reference only and will be removed in a future release.
+
+---
+
 This document explains how to use the provided **SQL script** to set up the **MDLH GOLD layer** in your Snowflake environment.
 It is intended to be **distributed together with the SQL file** and used as a step-by-step execution guide.
 
