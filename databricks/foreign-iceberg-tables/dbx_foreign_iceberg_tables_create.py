@@ -115,7 +115,15 @@ def main():
     logger.info("Starting Polaris → Unity Catalog sync")
 
     spark = SparkSession.builder.getOrCreate()
-    spark.conf.set("spark.databricks.delta.uniform.readIcebergEnabled", "true")
+    try:
+        spark.conf.set("spark.databricks.delta.uniform.readIcebergEnabled", "true")
+    except Exception:
+        logger.info(
+            "spark.databricks.delta.uniform.readIcebergEnabled is not available on this "
+            "Databricks Runtime. This is expected on runtimes where the feature has been "
+            "renamed to 'Read Iceberg Via Metadata Location' and is enabled at the "
+            "workspace level. Continuing without setting the config."
+        )
 
     reader = PolarisSQLReader()
     namespaces = reader.list_namespaces()
