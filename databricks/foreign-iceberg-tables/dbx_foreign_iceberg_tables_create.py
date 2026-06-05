@@ -54,6 +54,7 @@ class PolarisSQLReader:
         """
         logger.info("Detecting Polaris catalog...")
 
+        errors = {}
         for candidate in ["atlan-wh", "context_store"]:
             try:
                 test_catalog = load_catalog(
@@ -67,9 +68,14 @@ class PolarisSQLReader:
                 if namespaces:
                     logger.info(f"Using catalog: {candidate}")
                     return candidate, candidate
-            except Exception:
+            except Exception as e:
+                errors[candidate] = e
                 logger.info(f"Catalog not accessible: {candidate}")
 
+        logger.error(
+            "No valid Polaris catalog found. Errors per candidate: "
+            + "; ".join(f"{name}: {err!r}" for name, err in errors.items())
+        )
         raise RuntimeError("No valid Polaris catalog found")
 
     def connect_to_catalog(self):
