@@ -4,7 +4,358 @@ All templates use `{{PLACEHOLDER}}` parameters. See the [SQL Template Reference]
 
 All templates are written in Snowflake SQL as the canonical dialect unless otherwise noted. **Agents should adapt syntax to the target engine on the fly.**
 
-> **Important — LINEAGE table:** These templates reference a `LINEAGE` table that is **not** part of the native GOLD namespace. It must be created separately in your warehouse. See [Set up lineage tables](https://docs.atlan.com/platform/lakehouse/references/set-up-lineage-tables). The `LINEAGE` table has columns: `start_guid`, `start_name`, `start_type`, `related_guid`, `related_name`, `related_type`, `direction` (`UPSTREAM` or `DOWNSTREAM`), `level` (hop depth, 1 = direct).
+> **Important — `LINEAGE` is customer-managed, not native.**
+> The native lakehouse table is `GOLD.LINEAGE_ADJACENCY_LIST` with two columns: `from_guid` (upstream) and `to_guid` (downstream). The `BASE_EDGES` table and the `LINEAGE` recursive view used throughout this file are **customer-managed helper objects** that you create once on top of `LINEAGE_ADJACENCY_LIST` (the Lakehouse catalog itself is read-only — create them in your own writable schema). The `LINEAGE` view emits these columns: `direction` (`UPSTREAM` or `DOWNSTREAM`), `start_guid`, `start_name`, `start_type`, `related_guid`, `related_name`, `related_type`, `connecting_guid`, `level` (hop depth, 1 = direct).
+> Run the [setup DDL below](#setup--create-lineage-helper-objects) before using any lineage template.
+
+---
+
+## Setup — create lineage helper objects
+
+You must create `BASE_EDGES` and `LINEAGE` once in your own writable database/schema before using any of the templates in this file. The DDL below is reproduced verbatim from the Atlan docs page [Set up lineage tables](https://docs.atlan.com/platform/lakehouse/how-tos/set-up-lineage-tables) (verified 2026-06-09).
+
+**Refresh:** `BASE_EDGES` is a materialized snapshot — re-run its `CREATE OR REPLACE` on a schedule (hourly or daily) to pick up new lineage edges. The `LINEAGE` view reads `BASE_EDGES` live and never needs a separate refresh.
+
+**Prerequisites:**
+- The query engine is connected to the Lakehouse.
+- You have write access to a database in your warehouse where you can create tables and views (the Lakehouse catalog itself is read-only).
+- Databricks: a Runtime / SQL warehouse channel that supports `WITH RECURSIVE` (Databricks Runtime 14.0+ or current SQL warehouse channel).
+
+**Identifiers to replace before running:**
+- Snowflake — replace `MY_DATABASE.MY_SCHEMA` with your target writable schema, and `ATLAN_CONTEXT_STORE` with your Lakehouse catalog database name.
+- Databricks — replace `MY_CATALOG.MY_SCHEMA` with your target writable schema, and `LAKEHOUSE_CATALOG` with your Lakehouse Unity Catalog name.
+- BigQuery — replace `MY_PROJECT.MY_DATASET` with your target writable project+dataset, and `PROJECT_ID.LAKEHOUSE_DATASET` with the project+dataset where your Lakehouse external Iceberg tables live.
+
+### Snowflake
+
+```sql
+-- Step 1: BASE_EDGES — lineage edges enriched with asset names and types
+CREATE OR REPLACE TABLE MY_DATABASE.MY_SCHEMA.BASE_EDGES (
+    input_guid,
+    input_name,
+    input_type,
+    output_guid,
+    output_name,
+    output_type)
+COMMENT = 'Lineage edges enriched with asset names and types'
+AS
+SELECT DISTINCT
+    e.from_guid AS input_guid,
+    COALESCE(i.asset_name, e.from_guid) AS input_name,
+    COALESCE(i.asset_type, 'unknown') AS input_type,
+    e.to_guid AS output_guid,
+    COALESCE(o.asset_name, e.to_guid) AS output_name,
+    COALESCE(o.asset_type, 'unknown') AS output_type
+FROM ATLAN_CONTEXT_STORE."gold".lineage_adjacency_list e
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM ATLAN_CONTEXT_STORE."gold".assets) i ON e.from_guid = i.guid
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM ATLAN_CONTEXT_STORE."gold".assets) o ON e.to_guid = o.guid
+WHERE e.from_guid IS NOT NULL AND e.to_guid IS NOT NULL;
+```
+
+```sql
+-- Step 2: LINEAGE — multi-hop upstream and downstream lineage view
+CREATE OR REPLACE VIEW MY_DATABASE.MY_SCHEMA.LINEAGE (
+    direction,
+    start_guid,
+    start_name,
+    start_type,
+    related_guid,
+    related_name,
+    related_type,
+    connecting_guid,
+    level)
+COMMENT = 'Multi-hop upstream and downstream lineage for all assets'
+AS
+WITH
+DOWNSTREAM AS (
+    SELECT
+        input_guid AS start_guid,
+        input_name AS start_name,
+        input_type AS start_type,
+        output_guid AS related_guid,
+        output_name AS related_name,
+        output_type AS related_type,
+        input_guid AS connecting_guid,
+        1 AS level,
+        input_guid || ',' || output_guid AS path_str
+    FROM MY_DATABASE.MY_SCHEMA.BASE_EDGES
+    UNION ALL
+    SELECT
+        d.start_guid,
+        d.start_name,
+        d.start_type,
+        e.output_guid AS related_guid,
+        e.output_name AS related_name,
+        e.output_type AS related_type,
+        d.related_guid AS connecting_guid,
+        d.level + 1 AS level,
+        d.path_str || ',' || e.output_guid AS path_str
+    FROM DOWNSTREAM d
+    JOIN MY_DATABASE.MY_SCHEMA.BASE_EDGES e
+        ON d.related_guid = e.input_guid
+    WHERE POSITION(e.output_guid IN d.path_str) = 0),
+UPSTREAM AS (
+    SELECT
+        output_guid AS start_guid,
+        output_name AS start_name,
+        output_type AS start_type,
+        input_guid AS related_guid,
+        input_name AS related_name,
+        input_type AS related_type,
+        output_guid AS connecting_guid,
+        1 AS level,
+        output_guid || ',' || input_guid AS path_str
+    FROM MY_DATABASE.MY_SCHEMA.BASE_EDGES
+    UNION ALL
+    SELECT
+        u.start_guid,
+        u.start_name,
+        u.start_type,
+        e.input_guid AS related_guid,
+        e.input_name AS related_name,
+        e.input_type AS related_type,
+        u.related_guid AS connecting_guid,
+        u.level + 1 AS level,
+        u.path_str || ',' || e.input_guid AS path_str
+    FROM UPSTREAM u
+    JOIN MY_DATABASE.MY_SCHEMA.BASE_EDGES e
+        ON u.related_guid = e.output_guid
+    WHERE POSITION(e.input_guid IN u.path_str) = 0)
+SELECT DISTINCT
+    'DOWNSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM DOWNSTREAM
+WHERE related_guid IS NOT NULL
+UNION ALL
+SELECT DISTINCT
+    'UPSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM UPSTREAM
+WHERE related_guid IS NOT NULL;
+```
+
+### Databricks
+
+`BASE_EDGES` is a materialized view here. The `LINEAGE` view uses `WITH RECURSIVE` and `LOCATE(...)` for cycle detection.
+
+```sql
+-- Step 1: BASE_EDGES — lineage edges enriched with asset names and types
+CREATE OR REPLACE MATERIALIZED VIEW MY_CATALOG.MY_SCHEMA.BASE_EDGES
+COMMENT 'Lineage edges enriched with asset names and types'
+AS
+SELECT DISTINCT
+    e.from_guid AS input_guid,
+    COALESCE(i.asset_name, e.from_guid) AS input_name,
+    COALESCE(i.asset_type, 'unknown') AS input_type,
+    e.to_guid AS output_guid,
+    COALESCE(o.asset_name, e.to_guid) AS output_name,
+    COALESCE(o.asset_type, 'unknown') AS output_type
+FROM LAKEHOUSE_CATALOG.gold.lineage_adjacency_list e
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM LAKEHOUSE_CATALOG.gold.assets) i ON e.from_guid = i.guid
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM LAKEHOUSE_CATALOG.gold.assets) o ON e.to_guid = o.guid
+WHERE e.from_guid IS NOT NULL AND e.to_guid IS NOT NULL;
+```
+
+```sql
+-- Step 2: LINEAGE — multi-hop upstream and downstream lineage view
+CREATE OR REPLACE VIEW MY_CATALOG.MY_SCHEMA.LINEAGE (
+    direction,
+    start_guid,
+    start_name,
+    start_type,
+    related_guid,
+    related_name,
+    related_type,
+    connecting_guid,
+    level)
+COMMENT 'Multi-hop upstream and downstream lineage for all assets'
+AS
+WITH RECURSIVE
+DOWNSTREAM AS (
+    SELECT
+        input_guid AS start_guid,
+        input_name AS start_name,
+        input_type AS start_type,
+        output_guid AS related_guid,
+        output_name AS related_name,
+        output_type AS related_type,
+        input_guid AS connecting_guid,
+        1 AS level,
+        input_guid || ',' || output_guid AS path_str
+    FROM MY_CATALOG.MY_SCHEMA.BASE_EDGES
+    UNION ALL
+    SELECT
+        d.start_guid,
+        d.start_name,
+        d.start_type,
+        e.output_guid AS related_guid,
+        e.output_name AS related_name,
+        e.output_type AS related_type,
+        d.related_guid AS connecting_guid,
+        d.level + 1 AS level,
+        d.path_str || ',' || e.output_guid AS path_str
+    FROM DOWNSTREAM d
+    JOIN MY_CATALOG.MY_SCHEMA.BASE_EDGES e
+        ON d.related_guid = e.input_guid
+    WHERE LOCATE(e.output_guid, d.path_str) = 0),
+UPSTREAM AS (
+    SELECT
+        output_guid AS start_guid,
+        output_name AS start_name,
+        output_type AS start_type,
+        input_guid AS related_guid,
+        input_name AS related_name,
+        input_type AS related_type,
+        output_guid AS connecting_guid,
+        1 AS level,
+        output_guid || ',' || input_guid AS path_str
+    FROM MY_CATALOG.MY_SCHEMA.BASE_EDGES
+    UNION ALL
+    SELECT
+        u.start_guid,
+        u.start_name,
+        u.start_type,
+        e.input_guid AS related_guid,
+        e.input_name AS related_name,
+        e.input_type AS related_type,
+        u.related_guid AS connecting_guid,
+        u.level + 1 AS level,
+        u.path_str || ',' || e.input_guid AS path_str
+    FROM UPSTREAM u
+    JOIN MY_CATALOG.MY_SCHEMA.BASE_EDGES e
+        ON u.related_guid = e.output_guid
+    WHERE LOCATE(e.input_guid, u.path_str) = 0)
+SELECT DISTINCT
+    'DOWNSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM DOWNSTREAM
+WHERE related_guid IS NOT NULL
+UNION ALL
+SELECT DISTINCT
+    'UPSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM UPSTREAM
+WHERE related_guid IS NOT NULL;
+```
+
+### BigQuery
+
+BigQuery uses `OPTIONS(description=...)` for object descriptions, backticks around fully-qualified native references, and `STRPOS(...)` (instead of `POSITION` / `LOCATE`) for cycle detection. The Lakehouse external Iceberg dataset must be in the same region as the project where you create `BASE_EDGES` and `LINEAGE`.
+
+```sql
+-- Step 1: BASE_EDGES — lineage edges enriched with asset names and types
+CREATE OR REPLACE TABLE MY_PROJECT.MY_DATASET.BASE_EDGES
+OPTIONS(description='Lineage edges enriched with asset names and types')
+AS
+SELECT DISTINCT
+    e.from_guid AS input_guid,
+    COALESCE(i.asset_name, e.from_guid) AS input_name,
+    COALESCE(i.asset_type, 'unknown') AS input_type,
+    e.to_guid AS output_guid,
+    COALESCE(o.asset_name, e.to_guid) AS output_name,
+    COALESCE(o.asset_type, 'unknown') AS output_type
+FROM `PROJECT_ID.LAKEHOUSE_DATASET.lineage_adjacency_list` e
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM `PROJECT_ID.LAKEHOUSE_DATASET.assets`) i ON e.from_guid = i.guid
+LEFT JOIN (
+    SELECT DISTINCT guid, asset_name, asset_type
+    FROM `PROJECT_ID.LAKEHOUSE_DATASET.assets`) o ON e.to_guid = o.guid
+WHERE e.from_guid IS NOT NULL AND e.to_guid IS NOT NULL;
+```
+
+```sql
+-- Step 2: LINEAGE — multi-hop upstream and downstream lineage view
+CREATE OR REPLACE VIEW MY_PROJECT.MY_DATASET.LINEAGE
+OPTIONS(description='Multi-hop upstream and downstream lineage for all assets')
+AS
+WITH RECURSIVE
+DOWNSTREAM AS (
+    SELECT
+        input_guid AS start_guid,
+        input_name AS start_name,
+        input_type AS start_type,
+        output_guid AS related_guid,
+        output_name AS related_name,
+        output_type AS related_type,
+        input_guid AS connecting_guid,
+        1 AS level,
+        input_guid || ',' || output_guid AS path_str
+    FROM MY_PROJECT.MY_DATASET.BASE_EDGES
+    UNION ALL
+    SELECT
+        d.start_guid,
+        d.start_name,
+        d.start_type,
+        e.output_guid AS related_guid,
+        e.output_name AS related_name,
+        e.output_type AS related_type,
+        d.related_guid AS connecting_guid,
+        d.level + 1 AS level,
+        d.path_str || ',' || e.output_guid AS path_str
+    FROM DOWNSTREAM d
+    JOIN MY_PROJECT.MY_DATASET.BASE_EDGES e
+        ON d.related_guid = e.input_guid
+    WHERE STRPOS(d.path_str, e.output_guid) = 0),
+UPSTREAM AS (
+    SELECT
+        output_guid AS start_guid,
+        output_name AS start_name,
+        output_type AS start_type,
+        input_guid AS related_guid,
+        input_name AS related_name,
+        input_type AS related_type,
+        output_guid AS connecting_guid,
+        1 AS level,
+        output_guid || ',' || input_guid AS path_str
+    FROM MY_PROJECT.MY_DATASET.BASE_EDGES
+    UNION ALL
+    SELECT
+        u.start_guid,
+        u.start_name,
+        u.start_type,
+        e.input_guid AS related_guid,
+        e.input_name AS related_name,
+        e.input_type AS related_type,
+        u.related_guid AS connecting_guid,
+        u.level + 1 AS level,
+        u.path_str || ',' || e.input_guid AS path_str
+    FROM UPSTREAM u
+    JOIN MY_PROJECT.MY_DATASET.BASE_EDGES e
+        ON u.related_guid = e.output_guid
+    WHERE STRPOS(u.path_str, e.input_guid) = 0)
+SELECT DISTINCT
+    'DOWNSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM DOWNSTREAM
+WHERE related_guid IS NOT NULL
+UNION ALL
+SELECT DISTINCT
+    'UPSTREAM' AS direction,
+    start_guid, start_name, start_type,
+    related_guid, related_name, related_type,
+    connecting_guid, level
+FROM UPSTREAM
+WHERE related_guid IS NOT NULL;
+```
 
 ---
 
