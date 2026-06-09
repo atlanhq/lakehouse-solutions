@@ -1,10 +1,10 @@
 # Atlan Lakehouse Skill
 
-An [Agent Skills](https://agentskills.io/specification) skill that teaches AI coding agents how to connect to and query the Atlan Metadata Lakehouse (MDLH). Works across Snowflake (Cortex Code), Databricks (Genie Code), and Python (PyIceberg).
+An [Agent Skills](https://agentskills.io/specification) skill that teaches AI coding agents how to connect to and query the Atlan Metadata Lakehouse (MDLH). Works across Snowflake (Cortex Code), Databricks (Genie Code), BigQuery (BigQuery Studio / `bq` / BigLake), and Python (PyIceberg).
 
 ## What's included
 
-- **Cross-platform connection** — automatic platform detection with native SQL for Snowflake/Databricks and PyIceberg for Python environments
+- **Cross-platform connection** — automatic platform detection with native SQL for Snowflake / Databricks / BigQuery and PyIceberg for Python environments
 - **Entity Metadata templates** — metadata completeness, lineage analysis (orphans, circular dependencies, coverage, hubs), glossary term export
 - **Usage Analytics templates** — active users (DAU/WAU/MAU), feature adoption, engagement depth, retention cohorts, customer health scoring
 - **Key conventions** — domain handling, noise event filtering, session derivation, timezone conversion, feature area mapping
@@ -36,6 +36,7 @@ This skill follows the [Agent Skills Spec](https://agentskills.io/specification)
 
 - **Snowflake / Cortex Code**: Access to the Snowflake database containing your Atlan Lakehouse data
 - **Databricks / Genie Code**: Access to the Unity Catalog catalog containing your Atlan Lakehouse data
+- **BigQuery / BigQuery Studio**: Access to the BigQuery project and datasets exposing your Atlan Lakehouse external Iceberg tables
 - **Python / PyIceberg**: MDLH OAuth credentials (Client ID + Secret) from the Atlan Marketplace. See [Enable Lakehouse](https://docs.atlan.com/platform/lakehouse/how-tos/enable-lakehouse#next-steps) for setup.
 
 ## Usage
@@ -53,4 +54,4 @@ The skill detects your platform and uses the appropriate connection method — n
 
 ## SQL Dialect
 
-All SQL templates use Snowflake as the canonical dialect. Agents adapt syntax automatically for other engines (e.g., `CONVERT_TIMEZONE` to `FROM_UTC_TIMESTAMP` for Databricks).
+All SQL templates use Snowflake as the canonical dialect. Agents adapt syntax automatically for other engines (e.g., `CONVERT_TIMEZONE` to `FROM_UTC_TIMESTAMP` for Databricks; `TIMESTAMP_MILLIS` and backtick-quoted identifiers for BigQuery).

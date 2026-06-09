@@ -404,9 +404,48 @@ WHERE
 ORDER BY DAYS_SINCE_UPDATE DESC, a.asset_name;
 ```
 
-**BigQuery variant** — replace timestamp expressions:
-- `TO_TIMESTAMP_LTZ(a.created_at / 1000)` → `TIMESTAMP_MILLIS(CAST(a.created_at AS INT64))`
-- `DATEDIFF(day, ..., CURRENT_TIMESTAMP())` → `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), ..., DAY)`
+**BigQuery variant:**
+
+```sql
+-- ASSETS WITHOUT LINEAGE — BigQuery
+-- gold.assets: Lakehouse catalog (GOLD namespace)
+SELECT
+    a.guid,
+    a.asset_name,
+    a.asset_type,
+    a.asset_qualified_name,
+    a.connector_name,
+    a.description,
+    a.certificate_status,
+    a.status,
+    a.owner_users,
+    a.tags,
+    a.has_lineage,
+    TIMESTAMP_MILLIS(CAST(a.created_at AS INT64)) AS CREATED_DATE,
+    TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)) AS LAST_UPDATED,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.created_at AS INT64)), DAY) AS DAYS_SINCE_CREATION,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)), DAY) AS DAYS_SINCE_UPDATE,
+    CASE
+        WHEN a.certificate_status = 'DEPRECATED'
+        THEN '🔴 SAFE TO DELETE - Already deprecated'
+        WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)), DAY) > 180
+             AND a.status = 'ACTIVE'
+        THEN '🟡 REVIEW FOR DELETION - No activity in 6+ months'
+        WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.created_at AS INT64)), DAY) <= 7
+        THEN '🟢 KEEP - Recently created, may not be connected yet'
+        WHEN (a.owner_users IS NULL)
+        THEN '🟡 INVESTIGATE - No owner, likely test/temp asset'
+        ELSE '🟢 REVIEW - May be intentionally standalone'
+    END AS CLEANUP_RECOMMENDATION
+FROM `{{DATABASE}}.gold.assets` a
+WHERE
+    a.has_lineage = FALSE
+    AND a.asset_type IN ('Table', 'View', 'MaterializedView')
+    AND a.status = 'ACTIVE'
+    AND a.connector_name IN ('snowflake', 'redshift', 'bigquery', 'databricks')
+    AND TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)), DAY) > 90
+ORDER BY DAYS_SINCE_UPDATE DESC, a.asset_name;
+```
 
 ---
 
@@ -530,9 +569,43 @@ HAVING COUNT(CASE WHEN l.level = 1 THEN 1 END) > 0
 ORDER BY TOTAL_CONNECTIONS DESC;
 ```
 
-**BigQuery variant** — replace:
-- `TO_TIMESTAMP_LTZ(a.updated_at / 1000)` → `TIMESTAMP_MILLIS(a.updated_at)`
-- `DATEDIFF(day, ..., CURRENT_TIMESTAMP())` → `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), ..., DAY)`
+**BigQuery variant:**
+
+```sql
+-- MOST CONNECTED ASSETS — BigQuery
+SELECT
+    a.asset_name,
+    a.asset_type,
+    a.asset_qualified_name,
+    a.connector_name,
+    a.certificate_status,
+    a.owner_users,
+    TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)) AS LAST_UPDATED,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)), DAY) AS DAYS_SINCE_UPDATE,
+    COUNT(CASE WHEN l.direction = 'UPSTREAM' AND l.level = 1 THEN 1 END) AS UPSTREAM_COUNT,
+    COUNT(CASE WHEN l.direction = 'DOWNSTREAM' AND l.level = 1 THEN 1 END) AS DOWNSTREAM_COUNT,
+    COUNT(CASE WHEN l.level = 1 THEN 1 END) AS TOTAL_CONNECTIONS,
+    CASE
+        WHEN COUNT(CASE WHEN l.direction = 'DOWNSTREAM' AND l.level = 1 THEN 1 END) >= 20
+        THEN '🔴 CRITICAL - 20+ downstream dependencies'
+        WHEN COUNT(CASE WHEN l.direction = 'DOWNSTREAM' AND l.level = 1 THEN 1 END) >= 10
+        THEN '🟠 HIGH IMPACT - 10-19 downstream dependencies'
+        WHEN COUNT(CASE WHEN l.direction = 'DOWNSTREAM' AND l.level = 1 THEN 1 END) >= 5
+        THEN '🟡 MODERATE IMPACT - 5-9 downstream dependencies'
+        ELSE '🟢 LOW IMPACT - <5 downstream dependencies'
+    END AS CRITICALITY_LEVEL
+FROM `{{DATABASE}}.gold.assets` a
+LEFT JOIN LINEAGE l ON a.guid = l.start_guid
+WHERE
+    a.has_lineage = TRUE
+    AND a.asset_type IN ('Table', 'View', 'MaterializedView')
+    AND a.status = 'ACTIVE'
+GROUP BY
+    a.asset_name, a.asset_type, a.asset_qualified_name,
+    a.connector_name, a.certificate_status, a.owner_users, a.updated_at
+HAVING COUNT(CASE WHEN l.level = 1 THEN 1 END) > 0
+ORDER BY TOTAL_CONNECTIONS DESC;
+```
 
 ---
 
@@ -746,9 +819,93 @@ WHERE
 ORDER BY l.level ASC, l.related_type, l.related_name;
 ```
 
-**Databricks / BigQuery** — same query; replace timestamp functions:
-- Databricks: `from_unixtime(a.updated_at / 1000)`, `datediff(CURRENT_DATE(), ...)`
-- BigQuery: `TIMESTAMP_MILLIS(a.updated_at)`, `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), ..., DAY)`
+**Databricks variant:**
+
+```sql
+-- DOWNSTREAM DASHBOARD IMPACT — Databricks
+SELECT
+    a.asset_name AS SOURCE_DATA_ASSET,
+    a.asset_type AS SOURCE_TYPE,
+    a.asset_qualified_name AS SOURCE_PATH,
+    from_unixtime(a.updated_at / 1000) AS SOURCE_LAST_UPDATED,
+    l.level AS HOPS_TO_DASHBOARD,
+    l.related_name AS IMPACTED_DASHBOARD_NAME,
+    l.related_type AS IMPACTED_DASHBOARD_TYPE,
+    ra.asset_qualified_name AS IMPACTED_DASHBOARD_PATH,
+    ra.owner_users AS DASHBOARD_OWNERS,
+    ra.description AS DASHBOARD_DESCRIPTION,
+    from_unixtime(ra.updated_at / 1000) AS DASHBOARD_LAST_UPDATED,
+    datediff(CURRENT_DATE(), from_unixtime(ra.updated_at / 1000)) AS DAYS_SINCE_DASHBOARD_UPDATE,
+    CASE
+        WHEN l.level = 1 THEN '🔴 DIRECT - Will break immediately'
+        WHEN l.level = 2 THEN '🟡 INDIRECT - May break through intermediate assets'
+        ELSE '🟢 DISTANT - Lower risk but monitor'
+    END AS IMPACT_SEVERITY,
+    CASE
+        WHEN l.level = 1 THEN 'Update dashboard queries before deployment'
+        WHEN l.level = 2 THEN 'Test dashboard after deployment'
+        ELSE 'Monitor dashboard post-deployment'
+    END AS RECOMMENDED_ACTION
+FROM {{DATABASE}}.GOLD.ASSETS a
+INNER JOIN LINEAGE l ON a.guid = l.start_guid
+LEFT JOIN {{DATABASE}}.GOLD.ASSETS ra ON l.related_guid = ra.guid
+WHERE
+    a.guid = 'ff0f00d5-dde5-4cf9-b199-2ab09a961bd2'  -- 🔧 replace with source table GUID
+    AND l.direction = 'DOWNSTREAM'
+    AND l.related_type IN (
+        'TableauDashboard', 'TableauWorkbook', 'TableauWorksheet',
+        'PowerBIDashboard', 'PowerBIReport', 'PowerBIDataset',
+        'LookerDashboard', 'LookerLook',
+        'ThoughtspotLiveboard', 'ThoughtspotAnswer',
+        'MicroStrategyDossier', 'QlikApp', 'SigmaWorkbook'
+    )
+    AND l.level <= 3
+ORDER BY l.level ASC, l.related_type, l.related_name;
+```
+
+**BigQuery variant:**
+
+```sql
+-- DOWNSTREAM DASHBOARD IMPACT — BigQuery
+SELECT
+    a.asset_name AS SOURCE_DATA_ASSET,
+    a.asset_type AS SOURCE_TYPE,
+    a.asset_qualified_name AS SOURCE_PATH,
+    TIMESTAMP_MILLIS(CAST(a.updated_at AS INT64)) AS SOURCE_LAST_UPDATED,
+    l.level AS HOPS_TO_DASHBOARD,
+    l.related_name AS IMPACTED_DASHBOARD_NAME,
+    l.related_type AS IMPACTED_DASHBOARD_TYPE,
+    ra.asset_qualified_name AS IMPACTED_DASHBOARD_PATH,
+    ra.owner_users AS DASHBOARD_OWNERS,
+    ra.description AS DASHBOARD_DESCRIPTION,
+    TIMESTAMP_MILLIS(CAST(ra.updated_at AS INT64)) AS DASHBOARD_LAST_UPDATED,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(CAST(ra.updated_at AS INT64)), DAY) AS DAYS_SINCE_DASHBOARD_UPDATE,
+    CASE
+        WHEN l.level = 1 THEN '🔴 DIRECT - Will break immediately'
+        WHEN l.level = 2 THEN '🟡 INDIRECT - May break through intermediate assets'
+        ELSE '🟢 DISTANT - Lower risk but monitor'
+    END AS IMPACT_SEVERITY,
+    CASE
+        WHEN l.level = 1 THEN 'Update dashboard queries before deployment'
+        WHEN l.level = 2 THEN 'Test dashboard after deployment'
+        ELSE 'Monitor dashboard post-deployment'
+    END AS RECOMMENDED_ACTION
+FROM `{{DATABASE}}.gold.assets` a
+INNER JOIN LINEAGE l ON a.guid = l.start_guid
+LEFT JOIN `{{DATABASE}}.gold.assets` ra ON l.related_guid = ra.guid
+WHERE
+    a.guid = 'ff0f00d5-dde5-4cf9-b199-2ab09a961bd2'  -- 🔧 replace with source table GUID
+    AND l.direction = 'DOWNSTREAM'
+    AND l.related_type IN (
+        'TableauDashboard', 'TableauWorkbook', 'TableauWorksheet',
+        'PowerBIDashboard', 'PowerBIReport', 'PowerBIDataset',
+        'LookerDashboard', 'LookerLook',
+        'ThoughtspotLiveboard', 'ThoughtspotAnswer',
+        'MicroStrategyDossier', 'QlikApp', 'SigmaWorkbook'
+    )
+    AND l.level <= 3
+ORDER BY l.level ASC, l.related_type, l.related_name;
+```
 
 ---
 
