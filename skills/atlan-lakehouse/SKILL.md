@@ -103,7 +103,7 @@ Activate this skill when:
 You MUST follow exactly one connection path. Do NOT mix paths or fall back to PyIceberg when SQL is available.
 
 **Rule 1: If you can execute SQL directly — use SQL. Do NOT use Python/PyIceberg.**
-This applies when: a Snowflake MCP tool is available, you are in Cortex Code, a Databricks MCP tool is available, you are in Genie Code, or the user mentions any of these. Ask the user which database/catalog contains their Atlan Lakehouse, then run SQL queries directly. Skip the entire "Python / PyIceberg" section below — do not install packages, do not set up OAuth credentials, do not write Python scripts.
+This applies when: a Snowflake MCP tool is available, you are in Cortex Code, a Databricks MCP tool is available, you are in Genie Code, a BigQuery MCP tool is available, you are in BigQuery Studio / `bq` CLI, or the user mentions any of these. Ask the user which database/catalog/project+dataset contains their Atlan Lakehouse, then run SQL queries directly. Skip the entire "Python / PyIceberg" section below — do not install packages, do not set up OAuth credentials, do not write Python scripts.
 
 **Rule 2: Only use PyIceberg when no SQL execution environment exists.**
 This applies when: you are in a plain terminal (Claude Code CLI), a Jupyter notebook, or a standalone Python script with no database connection.
@@ -114,6 +114,7 @@ This applies when: you are in a plain terminal (Claude Code CLI), a Jupyter note
 |--------|----------|--------|
 | Snowflake MCP tool available, or user mentions Cortex Code / Snowflake | **Snowflake** | Run SQL directly against the lakehouse database |
 | Databricks MCP tool available, or user mentions Genie Code / Databricks | **Databricks** | Run SQL directly against the lakehouse catalog |
+| BigQuery MCP tool available, or user mentions BigQuery / BigQuery Studio / `bq` CLI / BigLake | **BigQuery** | Run SQL directly against the lakehouse external Iceberg dataset |
 | None of the above | **Python** | Use PyIceberg with OAuth credentials |
 
 ## Query Planning — Namespace Selection
@@ -132,7 +133,7 @@ After determining your platform, choose the right namespace for the query. Follo
    - Use `ENTITY_METADATA` directly if GOLD adds no value for the specific query.
 
 3. **Lineage analysis** (impact, root cause, coverage, hub assets, tag propagation, downstream dashboards)?
-   → **Hybrid approach:** Use `GOLD.ASSETS` joined to the customer-managed `LINEAGE` table (created separately — see [Set up lineage tables](https://docs.atlan.com/platform/lakehouse/references/set-up-lineage-tables)). The `LINEAGE` table columns are: `start_guid`, `start_name`, `start_type`, `related_guid`, `related_name`, `related_type`, `direction` (`UPSTREAM`/`DOWNSTREAM`), `level` (hop depth).
+   → **Hybrid approach:** Use `GOLD.ASSETS` joined to a customer-managed `LINEAGE` view. The native source is `GOLD.LINEAGE_ADJACENCY_LIST` (columns `from_guid`, `to_guid`); `BASE_EDGES` and `LINEAGE` are helper objects you create on top of it (one-time setup; `BASE_EDGES` is materialized and refreshed on a schedule, `LINEAGE` reads it live). The `LINEAGE` view columns are: `direction` (`UPSTREAM`/`DOWNSTREAM`), `start_guid`, `start_name`, `start_type`, `related_guid`, `related_name`, `related_type`, `connecting_guid`, `level` (hop depth, 1 = direct). See [Setup — create lineage helper objects](references/lineage-templates.md#setup--create-lineage-helper-objects) for the inline DDL (Snowflake, Databricks, BigQuery), or [Set up lineage tables](https://docs.atlan.com/platform/lakehouse/how-tos/set-up-lineage-tables) for the Atlan docs version.
 
 4. **Usage analytics** (DAU/WAU/MAU, feature adoption, engagement, retention, health scoring)?
    → **`USAGE_ANALYTICS` namespace** (`PAGES`, `TRACKS`, `USERS`).
@@ -186,6 +187,31 @@ SELECT * FROM <lakehouse_catalog>.USAGE_ANALYTICS.TRACKS LIMIT 10;
 ```
 
 Use the catalog name as `{{DATABASE}}` in all SQL templates below. The schema maps to the namespace (e.g., `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS`).
+
+### BigQuery
+
+When running inside BigQuery (e.g., BigQuery Studio, `bq` CLI, or a BigQuery MCP tool), the lakehouse data is exposed as external Iceberg tables organised by namespace into BigQuery datasets in your project. No credentials or PyIceberg setup needed.
+
+**Ask the user**: "Which BigQuery project and datasets contain your Atlan Lakehouse data? (Each Lakehouse namespace — `gold`, `entity_metadata`, `usage_analytics`, etc. — is a separate dataset.)" Once known, query tables directly. BigQuery uses `project.dataset.table` and requires backticks around fully-qualified identifiers:
+
+```sql
+-- List datasets (namespaces) in the project
+SELECT schema_name FROM `<project>.INFORMATION_SCHEMA.SCHEMATA`;
+
+-- Query GOLD namespace (preferred for asset metadata)
+SELECT * FROM `<project>.gold.assets` LIMIT 10;
+SELECT * FROM `<project>.gold.relational_asset_details` LIMIT 10;
+
+-- Query ENTITY_METADATA (for tags, custom metadata, readmes, lineage)
+SELECT * FROM `<project>.entity_metadata.table` LIMIT 10;  -- use concrete type tables (table, column, view, etc.), not asset
+SELECT * FROM `<project>.usage_analytics.tracks` LIMIT 10;
+```
+
+> **Identifier case in BigQuery:** the external Iceberg tables expose **lowercase** dataset/table/column names (e.g., `gold.assets`, column `guid` not `GUID`) — the same convention Polaris uses. Snowflake/Databricks expose uppercase. When adapting templates from this skill (which use uppercase as the canonical dialect) for BigQuery, lowercase all dataset, table, and column identifiers.
+
+> **Hyphen-to-underscore conversion:** BigQuery dataset names cannot contain hyphens. Tenants onboarded before February 2026 use the `atlan-ns` Polaris namespace, which is exposed in BigQuery as the dataset `atlan_ns`.
+
+When templates use `{{DATABASE}}.{{SCHEMA}}.{{TABLE}}` (e.g., `MY_DB.GOLD.ASSETS`), wrap the equivalent BigQuery reference in backticks and use `project.dataset.table`: `` `my-project.gold.assets` ``. There is no separate "schema" layer in BigQuery — the namespace is the dataset.
 
 ### Python / PyIceberg
 
@@ -314,8 +340,8 @@ Templates use `{{PLACEHOLDER}}` parameters:
 
 | Parameter | Format | Example | Usage |
 |-----------|--------|---------|-------|
-| `{{DATABASE}}` | Unquoted | `MY_LAKEHOUSE_DB` | Database/catalog name (ask user) |
-| `{{SCHEMA}}` | Unquoted | `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS` | Schema/namespace name |
+| `{{DATABASE}}` | Unquoted | `MY_LAKEHOUSE_DB` | Database/catalog name (ask user). For BigQuery, this is the `project` and the namespace is the dataset — write fully-qualified references as `` `project.dataset.table` `` with backticks and lowercase identifiers. |
+| `{{SCHEMA}}` | Unquoted | `GOLD`, `ENTITY_METADATA`, `USAGE_ANALYTICS` | Schema/namespace name (lowercase in BigQuery: `gold`, `entity_metadata`, `usage_analytics`) |
 | `{{DOMAIN}}` | Single-quoted | `'acme.atlan.com'` | Your Atlan tenant domain (e.g., `'acme.atlan.com'`). Derive from tenant name: `{tenant}.atlan.com` |
 | `{{START_DATE}}` | Single-quoted | `'2025-01-01'` | Date range start |
 | `{{END_DATE}}` | Single-quoted | `'2025-12-31'` | Date range end |
@@ -351,7 +377,10 @@ Detailed schemas, conventions, and SQL templates are organized in the `reference
 | Table Has 0 Rows | This is expected for **supertype tables** (`ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`, etc.) — these are abstract parents in Atlan's type hierarchy and contain no data. Query the concrete type table instead (e.g., `TABLE`, `COLUMN`, `VIEW`). Also expected for unused connectors (e.g., `AIRFLOWDAG` if the tenant doesn't use Airflow). |
 | Wrong Database   | Ask the user which database/catalog contains their Atlan Lakehouse                |
 | Wrong Catalog    | Ask the user for the catalog name from their Lakehouse connection details          |
+| Wrong Project / Dataset (BigQuery) | Ask the user for the project ID and the dataset names mapped to each Lakehouse namespace (`gold`, `entity_metadata`, `usage_analytics`). Hyphenated namespaces are exposed as underscored datasets (e.g., `atlan-ns` → `atlan_ns`). |
+| `LINEAGE` view missing or empty | The `LINEAGE` view is customer-managed, not native. Run the setup DDL in [Setup — create lineage helper objects](references/lineage-templates.md#setup--create-lineage-helper-objects) (or the canonical [docs page](https://docs.atlan.com/platform/lakehouse/how-tos/set-up-lineage-tables)) once before using any lineage template. Re-run the `BASE_EDGES` `CREATE OR REPLACE TABLE` on a schedule (hourly/daily) to pick up new lineage edges. |
 | Column Not Found (PyIceberg) | Polaris returns lowercase column names — use `timestamp` not `TIMESTAMP` |
+| Column Not Found (BigQuery) | BigQuery external Iceberg tables also expose lowercase identifiers — use lowercase dataset/table/column names |
 
 > **Storage credentials:** PyIceberg works with any Iceberg REST Catalog (IRC) regardless of the underlying storage (S3, Azure Storage, GCS). The Polaris catalog vends temporary storage credentials automatically — you do not need to configure cloud storage credentials separately.
 
