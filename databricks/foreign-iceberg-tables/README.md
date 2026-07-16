@@ -13,13 +13,13 @@ Long-term, when Databricks adds native support for Iceberg REST Catalog federati
 
 ### 1. Enable Databricks Private Preview Feature
 
-Contact your Databricks account representative and request enablement of the following command:
+Contact your Databricks account representative and request enablement of the **Read Iceberg Via Metadata Location** feature, which enables the following command:
 
 ```
 CREATE TABLE ... UNIFORM ICEBERG ... METADATA_PATH
 ```
 
-This is a Private Preview feature (Foreign Iceberg Tables Private Preview) and must be enabled on your Databricks workspace before proceeding. Once enabled, notify Atlan Support so they can continue with the setup.
+This is a Private Preview feature (Read Iceberg Via Metadata Location) and must be enabled on your Databricks workspace before proceeding. Once enabled, notify Atlan Support so they can continue with the setup.
 
 ### 2. Contact Atlan Support
 
