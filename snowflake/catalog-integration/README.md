@@ -121,7 +121,6 @@ Create a database linked to the catalog integration. Snowflake will automaticall
 CREATE DATABASE <database_name>
   LINKED_CATALOG = (
     CATALOG = '<integration_name>',
-    ALLOWED_NAMESPACES = ('atlan-ns'),
     SYNC_INTERVAL_SECONDS = 3600
   )
   EXTERNAL_VOLUME = '<volume_name>';
