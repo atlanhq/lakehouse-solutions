@@ -73,7 +73,7 @@ ORDER BY LAST_ALTERED ASC;
 
 ### Option 1 (Recommended): Use the MDLH Table Maintenance App
 
-The [MDLH Table Maintenance](../mdlh-table-maintenance/) Streamlit app automates the whole process — it finds stale tables in a schema, refreshes their metadata, and re-enables auto-refresh in one click. Use it whenever more than a handful of tables are affected.
+The [MDLH Table Maintenance](../mdlh-table-maintenance/) Streamlit app automates the whole process — it checks `SYSTEM$AUTO_REFRESH_STATUS` on every Iceberg table in a schema, flags the ones whose auto-refresh is broken, then refreshes their metadata and re-enables auto-refresh in one click. Use it whenever more than a handful of tables are affected.
 
 ### Option 2: Repair Tables Manually
 

@@ -1,13 +1,14 @@
 # Snowflake Native Streamlit App - Iceberg Table Refresh Repair
 
-A native Snowflake Streamlit application that identifies stale Iceberg tables and provides an option to repair them by refreshing metadata and enabling auto-refresh.
+A native Snowflake Streamlit application that identifies Iceberg tables whose auto-refresh has stopped working — using `SYSTEM$AUTO_REFRESH_STATUS` as the authoritative signal — and repairs them by refreshing metadata and re-enabling auto-refresh.
 
 > For a step-by-step guide to diagnosing why tables stopped refreshing (and manual repair options), see the [auto-refresh troubleshooting guide](../catalog-integration/TROUBLESHOOTING.md).
 
 ## Features
 
-- **🔍 Find Stale Tables**: Identifies Iceberg tables that haven't been refreshed in the last N days
-- **📊 Detailed View**: Shows table name, last refresh timestamp, days since refresh, and row count
+- **🔍 Find Broken Tables**: Checks `SYSTEM$AUTO_REFRESH_STATUS` on every Iceberg table in a schema — any state other than `RUNNING` (or a populated failure field) means auto-refresh is broken
+- **⏱️ Optional Staleness Threshold**: Additionally flag tables whose `LAST_ALTERED` is older than N days (off by default — these can be healthy tables that simply had no new data); results from both signals are merged and labelled
+- **📊 Detailed View**: Shows table name, why it was flagged, refresh state, status detail, last-altered timestamp, and row count
 - **🔧 Repair Tables**: Refreshes selected tables and enables auto-refresh
 - **✅ Results Tracking**: Shows success/failure status for each repair operation
 - **📈 Statistics**: Displays summary metrics (total tables, average days since refresh, etc.)
@@ -18,6 +19,7 @@ A native Snowflake Streamlit application that identifies stale Iceberg tables an
 
 - Snowflake account with appropriate permissions to:
   - Query `INFORMATION_SCHEMA.TABLES`
+  - Call `SYSTEM$AUTO_REFRESH_STATUS` on the target tables
   - Execute `ALTER ICEBERG TABLE` commands
   - Create Streamlit apps
 - Access to databases containing Iceberg tables
@@ -68,24 +70,26 @@ Follow these steps to set up the MDLH Table Refresh Repair app in your Snowflake
    - You can change this to any database name
 2. Select the **Schema** from the dropdown
    - Schemas are automatically loaded from the selected database
-3. Configure the **Days Threshold** (default: 1 day)
-   - This determines how many days since last refresh to consider a table "stale"
+3. Optionally enable **"Also flag tables by staleness threshold"** and set the **Days Threshold**
+   - Off by default — the auto-refresh status check is the authoritative signal
+   - When enabled, tables whose `LAST_ALTERED` is older than N days are also flagged; these can be healthy tables that simply had no new data
 
-### Step 2: Find Stale Tables
+### Step 2: Scan Tables
 
-1. Click **"🔍 Find Stale Tables"**
-2. The app will query `INFORMATION_SCHEMA.TABLES` to find tables that:
-   - Are Iceberg tables (`IS_ICEBERG = 'YES'`)
-   - Have `LAST_ALTERED < DATEADD(day, -N, CURRENT_TIMESTAMP())`
+1. Click **"🔍 Scan Tables"**
+2. The app lists every Iceberg table in the schema (`IS_ICEBERG = 'YES'` in `INFORMATION_SCHEMA.TABLES`) and checks `SYSTEM$AUTO_REFRESH_STATUS` on each one:
+   - An `executionState` other than `RUNNING`, or a populated failure/error field, means auto-refresh is **broken**
+   - If the staleness threshold is enabled, tables past the threshold are merged into the results and labelled
 3. Results are displayed in a table showing:
    - Table Name
-   - Last Refreshed (timestamp)
-   - Days Since Refresh
+   - Flagged By (`Auto-refresh status`, `Threshold only`, or `Status + threshold`)
+   - Refresh State and Status Detail
+   - Last Altered (timestamp), Days Since Altered
    - Row Count
 
 ### Step 3: Repair Tables
 
-1. **Select Tables**: Choose which tables to repair (default: all selected)
+1. **Select Tables**: Choose which tables to repair (default: the tables with broken auto-refresh are preselected; threshold-only tables are listed but not preselected)
 2. **Preview SQL**: Click "Preview SQL Commands" to see what will be executed
 3. **Repair**: Click **"🔧 Repair Selected Tables"**
 4. For each table, the app will:
@@ -96,7 +100,7 @@ Follow these steps to set up the MDLH Table Refresh Repair app in your Snowflake
 
 ## SQL Queries Used
 
-### Finding Stale Tables
+### Listing Iceberg Tables
 
 ```sql
 SELECT
@@ -106,8 +110,13 @@ SELECT
 FROM <database>.INFORMATION_SCHEMA.TABLES
 WHERE TABLE_SCHEMA = '<schema>'
   AND IS_ICEBERG = 'YES'
-  AND LAST_ALTERED < DATEADD(day, -<days_threshold>, CURRENT_TIMESTAMP())
 ORDER BY LAST_ALTERED ASC
+```
+
+### Checking Auto-Refresh Status (per table)
+
+```sql
+SELECT SYSTEM$AUTO_REFRESH_STATUS('<database>."<schema>"."<table>"');
 ```
 
 ### Repairing Each Table
@@ -125,11 +134,13 @@ ALTER ICEBERG TABLE <database>.<schema>.<table> SET AUTO_REFRESH = TRUE;
 
 ## Features Explained
 
-### Stale Table Detection
+### Broken Table Detection
 
-The app identifies tables that:
-- Are Iceberg tables (`IS_ICEBERG = 'YES'` in `INFORMATION_SCHEMA.TABLES`)
-- Haven't been refreshed recently (`LAST_ALTERED < threshold`)
+The app scans every Iceberg table in the schema (`IS_ICEBERG = 'YES'` in `INFORMATION_SCHEMA.TABLES`) and flags a table when:
+- **Auto-refresh status** (authoritative, always on): `SYSTEM$AUTO_REFRESH_STATUS` reports an `executionState` other than `RUNNING`, or a populated failure/error field
+- **Staleness threshold** (optional, off by default): `LAST_ALTERED < threshold` — a heuristic that also catches healthy tables with no new data, which is why it's opt-in and labelled separately
+
+The 'Flagged By' column distinguishes the two, so a healthy-but-quiet table isn't mistaken for a broken one.
 
 ### Repair Operation
 
@@ -148,11 +159,10 @@ For each selected table, the app:
 
 1. **Connect** to Snowflake with your credentials
 2. **Select** `MDLH_CONTEXT_STORE` database and `atlan-ns` schema
-3. **Set threshold** to 1 day
-4. **Find stale tables** - discovers 5 tables not refreshed in last 24 hours
-5. **Select all tables** (or specific ones)
-6. **Repair** - app refreshes all selected tables
-7. **View results** - all 5 tables successfully repaired ✅
+3. **Scan tables** - the status check flags 5 tables whose auto-refresh has stopped
+4. **Review the selection** - the 5 broken tables are preselected
+5. **Repair** - app refreshes all selected tables
+6. **View results** - all 5 tables successfully repaired ✅
 
 ## Troubleshooting
 
