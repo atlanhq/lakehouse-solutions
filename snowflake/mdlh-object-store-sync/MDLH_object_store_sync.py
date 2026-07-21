@@ -810,15 +810,30 @@ def render_scheduled_tab(conn, env):
                     st.error(f"Sync failed: {e}")
 
     st.subheader("Recent Runs")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        st.button("Refresh", key="refresh_history_btn")
+    with col2:
+        st.caption(
+            "All times UTC. This tab does not auto-update — click Refresh to "
+            "see new runs. A SCHEDULED row is the next planned run; EXECUTING "
+            "means a run is in progress and its summary appears on completion."
+        )
     try:
         history = conn.sql(
-            f"SELECT scheduled_time, state, completed_time, return_value, error_message "
+            f"SELECT "
+            f"    CONVERT_TIMEZONE('UTC', scheduled_time) AS scheduled_time_utc, "
+            f"    state, "
+            f"    CONVERT_TIMEZONE('UTC', completed_time) AS completed_time_utc, "
+            f"    return_value, error_message "
             f"FROM TABLE({DB}.INFORMATION_SCHEMA.TASK_HISTORY("
             f"TASK_NAME => '{PREFIX.upper()}_SYNC_TASK')) "
             f"ORDER BY scheduled_time DESC LIMIT 20"
         ).collect()
         if history:
             df = pd.DataFrame([row.as_dict() for row in history])
+            df.columns = ["Scheduled (UTC)", "State", "Completed (UTC)",
+                          "Result", "Error"]
             st.table(df.reset_index(drop=True))
         else:
             st.info("No task runs yet.")
