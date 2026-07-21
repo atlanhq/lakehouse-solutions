@@ -38,14 +38,14 @@ To run several independent setups in one account (for example separate Atlan ten
 
 ## Prerequisites
 
-- From Atlan: the **S3 base URL** (catalog root) and the **IAM role ARN** Snowflake will assume. The role needs `s3:GetObject` and `s3:ListBucket` scoped to the catalog root.
+- From Atlan: the **S3 base URI** (catalog root) and the **IAM role ARN** Snowflake will assume. The role needs `s3:GetObject` and `s3:ListBucket` scoped to the catalog root.
 - A role that can create external volumes, catalog integrations, and storage integrations (typically `ACCOUNTADMIN`), plus `EXECUTE MANAGED TASK` if you use a serverless sync task.
 - Snowflake Enterprise edition or higher.
 
 ## Setup
 
 1. In the Snowflake web interface, select **Projects** → **Streamlit**, create a new app on a database **other than** `atlan_context_store`, and paste in `MDLH_object_store_sync.py`.
-2. On the **Bootstrap** tab, enter the base URL and IAM role ARN from Atlan, pick a warehouse for the sync task from the dropdown (or keep the serverless default), and set the sync interval. Preview the SQL, then run the bootstrap.
+2. On the **Bootstrap** tab, enter the base URI and IAM role ARN from Atlan, pick a warehouse for the sync task from the dropdown (or keep the serverless default), and set the sync interval. Preview the SQL, then run the bootstrap.
 3. **Share with Atlan**: after bootstrap the app shows the Snowflake-generated IAM user ARN and external ID for both the external volume and the storage integration. Atlan adds these to the role's trust policy.
 4. Click **Verify Access** — it validates the external volume and lists the pointer files. If no pointer files are found, ask Atlan to enable the metadata pointer workflow for your tenant.
 5. On the **Sync** tab, run **Plan Sync** to see what will be created, then **Apply Plan**.
@@ -54,7 +54,7 @@ To run several independent setups in one account (for example separate Atlan ten
 ## Notes
 
 - The external volume is read-only (`ALLOW_WRITES = FALSE`); Snowflake never writes to the lakehouse bucket. Dropping tables (or the whole integration) removes Snowflake registrations only — no data in object storage is touched.
-- Metadata file paths are resolved relative to the base URL. If a table's `metadataLocation` is outside the base URL, the plan reports it as an error rather than guessing.
+- Metadata file paths are resolved relative to the base URI. If a table's `metadataLocation` is outside the base URI, the plan reports it as an error rather than guessing.
 - Iceberg format version: tables should be created pointing at their current-format metadata. An in-place v2 → v3 format bump on an existing table breaks `REFRESH`; the fix is to drop and re-create the affected table (the Sync tab's orphan + create flow handles this).
 - The sync interval defaults to 120 minutes, matching how often Atlan publishes pointer files. Shorter intervals are safe but add no freshness.
 

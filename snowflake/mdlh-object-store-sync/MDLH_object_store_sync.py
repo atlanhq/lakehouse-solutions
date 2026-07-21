@@ -98,15 +98,15 @@ def current_metadata_location(session, fqn):
     ).collect()
     return json.loads(rows[0][0]).get("metadataLocation")
 
-def relative_metadata_path(metadata_location, base_url):
-    """Path of metadata_location relative to the external volume base URL."""
-    if not metadata_location.startswith(base_url):
+def relative_metadata_path(metadata_location, base_uri):
+    """Path of metadata_location relative to the external volume base URI."""
+    if not metadata_location.startswith(base_uri):
         raise ValueError(
             f"metadataLocation {metadata_location} is outside the configured "
-            f"base URL {base_url} — check that the base URL matches the "
+            f"base URI {base_uri} — check that the base URI matches the "
             f"scheme, bucket, and path in the pointer files exactly"
         )
-    return metadata_location[len(base_url):]
+    return metadata_location[len(base_uri):]
 
 def list_existing_tables(session, namespace):
     """Names of Iceberg tables already registered in the namespace schema."""
@@ -131,7 +131,7 @@ def plan_sync(session, config):
     Read-only. Returns dicts with keys: action (CREATE | REFRESH | UP_TO_DATE
     | DROP_ORPHAN | ERROR), namespace, table, detail, sql.
     """
-    base_url = config["base_url"]
+    base_uri = config["base_uri"]
     actions = []
 
     index = read_stage_json(session, INDEX_PATH)
@@ -164,7 +164,7 @@ def plan_sync(session, config):
             seen.add(name)
             fqn = table_fqn(namespace, name)
             try:
-                rel = relative_metadata_path(tp["metadataLocation"], base_url)
+                rel = relative_metadata_path(tp["metadataLocation"], base_uri)
             except ValueError as e:
                 actions.append({"action": "ERROR", "namespace": namespace,
                                 "table": name, "detail": str(e), "sql": ""})
@@ -342,7 +342,7 @@ def list_warehouses(conn) -> List[str]:
 # Bootstrap SQL builders (S3)
 # ============================================================================
 
-def s3_external_volume_sql(base_url: str, role_arn: str, external_id: str) -> str:
+def s3_external_volume_sql(base_uri: str, role_arn: str, external_id: str) -> str:
     external_id_line = (
         f"        STORAGE_AWS_EXTERNAL_ID = '{sql_literal(external_id)}'\n"
         if external_id else ""
@@ -352,14 +352,14 @@ def s3_external_volume_sql(base_url: str, role_arn: str, external_id: str) -> st
         f"    STORAGE_LOCATIONS = ((\n"
         f"        NAME = '{PREFIX}_s3_location'\n"
         f"        STORAGE_PROVIDER = 'S3'\n"
-        f"        STORAGE_BASE_URL = '{sql_literal(base_url)}'\n"
+        f"        STORAGE_BASE_URL = '{sql_literal(base_uri)}'\n"
         f"        STORAGE_AWS_ROLE_ARN = '{sql_literal(role_arn)}'\n"
         f"{external_id_line}"
         f"    ))\n"
         f"    ALLOW_WRITES = FALSE"
     )
 
-def s3_storage_integration_sql(base_url: str, role_arn: str, external_id: str) -> str:
+def s3_storage_integration_sql(base_uri: str, role_arn: str, external_id: str) -> str:
     external_id_line = (
         f"    STORAGE_AWS_EXTERNAL_ID = '{sql_literal(external_id)}'\n"
         if external_id else ""
@@ -371,7 +371,7 @@ def s3_storage_integration_sql(base_url: str, role_arn: str, external_id: str) -
         f"    ENABLED = TRUE\n"
         f"    STORAGE_AWS_ROLE_ARN = '{sql_literal(role_arn)}'\n"
         f"{external_id_line}"
-        f"    STORAGE_ALLOWED_LOCATIONS = ('{sql_literal(base_url)}')"
+        f"    STORAGE_ALLOWED_LOCATIONS = ('{sql_literal(base_uri)}')"
     )
 
 def sync_procedure_sql() -> str:
@@ -418,28 +418,28 @@ def sync_task_sql(warehouse: str, schedule_minutes: int) -> str:
         f"AS CALL {SYNC_PROCEDURE}()"
     )
 
-def bootstrap_statements(base_url: str, role_arn: str, external_id: str,
+def bootstrap_statements(base_uri: str, role_arn: str, external_id: str,
                          warehouse: str, schedule_minutes: int,
                          drop_orphans: bool) -> List[str]:
     """Full bootstrap, in dependency order. Every statement is idempotent."""
     return [
-        s3_external_volume_sql(base_url, role_arn, external_id),
+        s3_external_volume_sql(base_uri, role_arn, external_id),
         f"CREATE CATALOG INTEGRATION IF NOT EXISTS {CATALOG_INTEGRATION}\n"
         f"    CATALOG_SOURCE = OBJECT_STORE\n"
         f"    TABLE_FORMAT = ICEBERG\n"
         f"    ENABLED = TRUE",
-        s3_storage_integration_sql(base_url, role_arn, external_id),
+        s3_storage_integration_sql(base_uri, role_arn, external_id),
         f"CREATE DATABASE IF NOT EXISTS {DB} COMMENT = '{DB_MARKER_COMMENT}'",
         f"CREATE SCHEMA IF NOT EXISTS {DB}.{ADMIN_SCHEMA}",
         f"CREATE FILE FORMAT IF NOT EXISTS {FILE_FORMAT} TYPE = JSON",
         f"CREATE STAGE IF NOT EXISTS {STAGE}\n"
-        f"    URL = '{sql_literal(base_url)}'\n"
+        f"    URL = '{sql_literal(base_uri)}'\n"
         f"    STORAGE_INTEGRATION = {STORAGE_INTEGRATION}\n"
         f"    FILE_FORMAT = {FILE_FORMAT}",
         f"CREATE TABLE IF NOT EXISTS {CONFIG_TABLE} (key VARCHAR, value VARCHAR)",
         f"DELETE FROM {CONFIG_TABLE}",
         f"INSERT INTO {CONFIG_TABLE} (key, value) VALUES\n"
-        f"    ('base_url', '{sql_literal(base_url)}'),\n"
+        f"    ('base_uri', '{sql_literal(base_uri)}'),\n"
         f"    ('provider', 'S3'),\n"
         f"    ('drop_orphans', '{'true' if drop_orphans else 'false'}')",
         sync_procedure_sql(),
@@ -487,7 +487,7 @@ def render_bootstrap_tab(conn):
         "an external volume and object-store catalog integration for the "
         "Iceberg tables, a storage integration and stage for reading the "
         "pointer files, and a stored procedure plus scheduled task for the "
-        "periodic sync. The base URL and IAM role are provided by Atlan."
+        "periodic sync. The base URI and IAM role are provided by Atlan."
     )
 
     provider_label = st.selectbox("Storage provider", options=list(PROVIDERS.keys()),
@@ -511,10 +511,10 @@ def render_bootstrap_tab(conn):
 
     col1, col2 = st.columns(2)
     with col1:
-        base_url = st.text_input(
-            "S3 base URL (catalog root, provided by Atlan)",
+        base_uri = st.text_input(
+            "S3 base URI (catalog root, provided by Atlan)",
             placeholder="s3://<bucket>/<catalog-root>/",
-            key="base_url",
+            key="base_uri",
         ).strip()
         role_arn = st.text_input(
             "IAM role ARN (provided by Atlan)",
@@ -556,19 +556,19 @@ def render_bootstrap_tab(conn):
         )
 
     problems = []
-    if base_url and (not base_url.startswith("s3://") or not base_url.endswith("/")):
-        problems.append("Base URL must start with s3:// and end with a trailing slash.")
+    if base_uri and (not base_uri.startswith("s3://") or not base_uri.endswith("/")):
+        problems.append("Base URI must start with s3:// and end with a trailing slash.")
     if role_arn and not AWS_ROLE_ARN_PATTERN.match(role_arn):
         problems.append("IAM role ARN does not look like arn:aws:iam::<account>:role/<name>.")
     for problem in problems:
         st.warning(problem)
 
-    ready = bool(base_url and role_arn) and not problems
+    ready = bool(base_uri and role_arn) and not problems
     if not ready:
-        st.info("Fill in the base URL and IAM role ARN to continue.")
+        st.info("Fill in the base URI and IAM role ARN to continue.")
         return
 
-    statements = bootstrap_statements(base_url, role_arn, external_id,
+    statements = bootstrap_statements(base_uri, role_arn, external_id,
                                       warehouse, schedule_minutes, drop_orphans)
 
     with st.expander("Preview SQL", expanded=False):
@@ -650,12 +650,12 @@ def render_sync_tab(conn, env):
     set_environment(env)
     st.header("Sync")
     config = try_load_config(conn)
-    if not config.get("base_url"):
+    if not config.get("base_uri"):
         st.info("No configuration found. Run Bootstrap first.")
         return
 
     st.markdown(
-        f"Compares the pointer files under `{config['base_url']}_latest/` with "
+        f"Compares the pointer files under `{config['base_uri']}_latest/` with "
         f"the tables registered in `{DB}` and builds a plan: **CREATE** missing "
         f"tables, **REFRESH** tables whose metadata pointer moved, and flag "
         f"**orphans** that disappeared from the pointer files."
