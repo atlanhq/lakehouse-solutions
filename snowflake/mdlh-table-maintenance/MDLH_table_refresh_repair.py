@@ -17,7 +17,6 @@ from typing import List, Dict, Tuple
 
 st.set_page_config(
     page_title="MDLH Table Refresh Repair",
-    page_icon="🔧",
     layout="wide"
 )
 
@@ -54,8 +53,8 @@ def get_snowflake_connection():
     except Exception:
         pass
 
-    st.error("❌ Could not establish Snowflake connection.")
-    st.info("💡 This app must be deployed as a native Snowflake Streamlit app to work properly.")
+    st.error("Could not establish Snowflake connection.")
+    st.info("This app must be deployed as a native Snowflake Streamlit app to work properly.")
     return None
 
 def execute_query(conn, query: str) -> List[Tuple]:
@@ -64,7 +63,7 @@ def execute_query(conn, query: str) -> List[Tuple]:
         result = conn.sql(query).collect()
         return [tuple(row) for row in result]
     except Exception as e:
-        st.error(f"❌ Query execution error: {str(e)}")
+        st.error(f"Query execution error: {str(e)}")
         raise
 
 def list_schemas(conn, database: str) -> List[str]:
@@ -86,7 +85,7 @@ def list_schemas(conn, database: str) -> List[str]:
         
         return schemas
     except Exception as e:
-        st.error(f"❌ Error listing schemas: {str(e)}")
+        st.error(f"Error listing schemas: {str(e)}")
         return []
 
 def list_iceberg_tables(conn, database: str, schema: str, days_threshold: int) -> List[Dict]:
@@ -124,7 +123,7 @@ def list_iceberg_tables(conn, database: str, schema: str, days_threshold: int) -
             for row in results
         ]
     except Exception as e:
-        st.error(f"❌ Error listing Iceberg tables: {str(e)}")
+        st.error(f"Error listing Iceberg tables: {str(e)}")
         return []
 
 def check_auto_refresh_status(conn, database: str, schema: str, table_name: str) -> Dict:
@@ -236,15 +235,15 @@ def repair_table(conn, database: str, schema: str, table_name: str) -> Tuple[boo
 def main():
     initialize_session_state()
     
-    st.title("🔧 MDLH Table Refresh Repair")
+    st.title("MDLH Table Refresh Repair")
     st.markdown("**Identify and repair MDLH Iceberg tables whose auto-refresh has stopped working**")
     
     # Get Snowflake connection (native app)
     conn = get_snowflake_connection()
     
     if conn is None:
-        st.error("❌ Unable to connect to Snowflake. Please check your app configuration.")
-        with st.expander("🔍 Troubleshooting", expanded=True):
+        st.error("Unable to connect to Snowflake. Please check your app configuration.")
+        with st.expander("Troubleshooting", expanded=True):
             st.markdown("""
             ### This app requires a native Snowflake Streamlit environment
             
@@ -269,7 +268,7 @@ def main():
         return
     
     # Database and Schema Selection
-    st.header("📊 Select Database & Schema")
+    st.header("Select Database & Schema")
     
     col1, col2 = st.columns(2)
     
@@ -303,20 +302,20 @@ def main():
                         key="selected_schema"
                     )
                 else:
-                    st.warning("⚠️ No schemas found in this database")
+                    st.warning("No schemas found in this database")
                     selected_schema = None
             except Exception as e:
-                st.error(f"❌ Error loading schemas: {str(e)}")
+                st.error(f"Error loading schemas: {str(e)}")
                 selected_schema = None
         else:
             selected_schema = None
-            st.info("👈 Enter a database name first")
+            st.info("Enter a database name first")
     
     st.divider()
     
     # Configuration
     if database_name and selected_schema:
-        st.subheader("⚙️ Configuration")
+        st.subheader("Configuration")
 
         st.markdown(
             "The scan checks `SYSTEM$AUTO_REFRESH_STATUS` on every Iceberg table in the "
@@ -344,7 +343,7 @@ def main():
             )
 
         # Scan tables
-        if st.button("🔍 Scan Tables", type="primary", key="find_stale_btn"):
+        if st.button("Scan Tables", type="primary", key="find_stale_btn"):
             progress_bar = st.progress(0)
             progress_text = st.empty()
 
@@ -373,22 +372,22 @@ def main():
             broken_count = sum(1 for t in flagged_tables if t['broken'])
             threshold_only_count = len(flagged_tables) - broken_count
             if broken_count:
-                message = f"⚠️ Found {broken_count} table(s) with broken auto-refresh"
+                message = f"Found {broken_count} table(s) with broken auto-refresh"
                 if threshold_only_count:
                     message += f", plus {threshold_only_count} past the staleness threshold but reporting healthy"
                 st.warning(message)
             elif flagged_tables:
                 st.info(
-                    f"ℹ️ Auto-refresh is healthy on every table; {threshold_only_count} table(s) "
+                    f"Auto-refresh is healthy on every table; {threshold_only_count} table(s) "
                     f"exceed the staleness threshold — likely just no new data"
                 )
             else:
-                st.success(f"✅ Auto-refresh is healthy on all Iceberg tables in {database_name}.{selected_schema}")
+                st.success(f"Auto-refresh is healthy on all Iceberg tables in {database_name}.{selected_schema}")
         
         # Display flagged tables
         if st.session_state.stale_tables:
             st.divider()
-            st.header("📋 Flagged Tables")
+            st.header("Flagged Tables")
             
             # Create DataFrame for display
             df_stale = pd.DataFrame(st.session_state.stale_tables)
@@ -409,7 +408,7 @@ def main():
             
             # Display table
             st.markdown(f"""
-            **⚠️ {len(df_stale)} table(s) flagged — the 'Flagged By' column shows why each one is listed:**
+            **{len(df_stale)} table(s) flagged — the 'Flagged By' column shows why each one is listed:**
             """)
 
             # Broken tables first, then by how long since the last alteration
@@ -453,7 +452,7 @@ def main():
             st.divider()
             
             # Repair Options
-            st.header("🔧 Repair Options")
+            st.header("Repair Options")
             
             # Select tables to repair
             st.subheader("Select Tables to Repair")
@@ -489,10 +488,10 @@ def main():
                 st.button("Clear All", key="clear_all_btn", on_click=_clear_all_tables)
             
             if selected_tables:
-                st.info(f"💡 {len(selected_tables)} table(s) selected for repair")
+                st.info(f"{len(selected_tables)} table(s) selected for repair")
                 
                 # Show what will be executed (same statements repair_table runs)
-                with st.expander("📝 Preview SQL Commands", expanded=False):
+                with st.expander("Preview SQL Commands", expanded=False):
                     st.markdown("**The following commands will be executed for each selected table:**")
                     for table_name in selected_tables:
                         statements = ";\n".join(
@@ -504,7 +503,7 @@ def main():
                         """)
                 
                 # Repair button
-                if st.button("🔧 Repair Selected Tables", type="primary", key="repair_btn"):
+                if st.button("Repair Selected Tables", type="primary", key="repair_btn"):
                     repair_results = []
                     progress_bar = st.progress(0)
                     status_text = st.empty()
@@ -533,30 +532,27 @@ def main():
                     status_text.empty()
 
                     st.session_state.repair_results = repair_results
-
-                    if all(r['success'] for r in repair_results):
-                        st.balloons()
             else:
-                st.info("👈 Select tables from the list above to repair them")
+                st.info("Select tables from the list above to repair them")
 
             # Rendered from session state so results survive widget interactions
             if st.session_state.repair_results:
                 st.divider()
-                st.header("✅ Repair Results")
+                st.header("Repair Results")
 
                 df_results = pd.DataFrame(st.session_state.repair_results)
                 success_count = df_results['success'].sum()
                 failure_count = len(df_results) - success_count
 
                 if success_count > 0:
-                    st.success(f"✅ Successfully repaired {success_count} table(s)")
+                    st.success(f"Successfully repaired {success_count} table(s)")
                 if failure_count > 0:
-                    st.error(f"❌ Failed to repair {failure_count} table(s)")
+                    st.error(f"Failed to repair {failure_count} table(s)")
 
                 # Results table
                 results_display = df_results.copy()
                 results_display['status'] = results_display['success'].apply(
-                    lambda x: '✅ Success' if x else '❌ Failed'
+                    lambda x: 'Success' if x else 'Failed'
                 )
                 results_display = results_display[['table_name', 'status', 'message']]
                 results_display.columns = ['Table Name', 'Status', 'Message']
@@ -568,25 +564,25 @@ def main():
                 # Show failed tables details
                 failed_tables = df_results[~df_results['success']]
                 if len(failed_tables) > 0:
-                    st.warning("⚠️ Some tables failed to repair. Details:")
+                    st.warning("Some tables failed to repair. Details:")
                     for _, row in failed_tables.iterrows():
-                        with st.expander(f"❌ {row['table_name']}", expanded=False):
+                        with st.expander(f"{row['table_name']}", expanded=False):
                             st.error(f"Error: {row['message']}")
 
                 # Success message
                 if failure_count == 0:
                     st.success("""
-                    🎉 **All selected tables have been successfully repaired!**
+                    **All selected tables have been successfully repaired!**
 
-                    - ✅ Tables have been refreshed
-                    - ✅ Auto-refresh has been enabled
+                    - Tables have been refreshed
+                    - Auto-refresh has been enabled
 
                     The tables should now stay up-to-date automatically.
                     """)
     
     # Instructions
     st.divider()
-    with st.expander("ℹ️ How This Works", expanded=False):
+    with st.expander("How This Works", expanded=False):
         st.markdown("""
         ### What This App Does
 
