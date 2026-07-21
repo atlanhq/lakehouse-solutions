@@ -347,8 +347,16 @@ def s3_external_volume_sql(base_uri: str, role_arn: str, external_id: str) -> st
         f"        STORAGE_AWS_EXTERNAL_ID = '{sql_literal(external_id)}'\n"
         if external_id else ""
     )
+    # With an explicit external ID, OR REPLACE so a re-bootstrap applies it —
+    # IF NOT EXISTS silently ignores changed settings on an existing volume.
+    # Without one, keep IF NOT EXISTS to preserve the generated external ID
+    # that may already be in the role trust policy.
+    create_clause = (
+        f"CREATE OR REPLACE EXTERNAL VOLUME {EXTERNAL_VOLUME}" if external_id
+        else f"CREATE EXTERNAL VOLUME IF NOT EXISTS {EXTERNAL_VOLUME}"
+    )
     return (
-        f"CREATE EXTERNAL VOLUME IF NOT EXISTS {EXTERNAL_VOLUME}\n"
+        f"{create_clause}\n"
         f"    STORAGE_LOCATIONS = ((\n"
         f"        NAME = '{PREFIX}_s3_location'\n"
         f"        STORAGE_PROVIDER = 'S3'\n"
@@ -368,6 +376,26 @@ def s3_storage_integration_sql(base_uri: str, role_arn: str, external_id: str) -
         f"CREATE STORAGE INTEGRATION IF NOT EXISTS {STORAGE_INTEGRATION}\n"
         f"    TYPE = EXTERNAL_STAGE\n"
         f"    STORAGE_PROVIDER = 'S3'\n"
+        f"    ENABLED = TRUE\n"
+        f"    STORAGE_AWS_ROLE_ARN = '{sql_literal(role_arn)}'\n"
+        f"{external_id_line}"
+        f"    STORAGE_ALLOWED_LOCATIONS = ('{sql_literal(base_uri)}')"
+    )
+
+def s3_storage_integration_alter_sql(base_uri: str, role_arn: str,
+                                     external_id: str) -> str:
+    """Converge an existing storage integration to the current inputs.
+
+    CREATE IF NOT EXISTS ignores changed settings, so bootstrap always
+    follows it with this ALTER; unlike OR REPLACE it keeps the integration
+    (and its Snowflake IAM user) in place.
+    """
+    external_id_line = (
+        f"    STORAGE_AWS_EXTERNAL_ID = '{sql_literal(external_id)}'\n"
+        if external_id else ""
+    )
+    return (
+        f"ALTER STORAGE INTEGRATION {STORAGE_INTEGRATION} SET\n"
         f"    ENABLED = TRUE\n"
         f"    STORAGE_AWS_ROLE_ARN = '{sql_literal(role_arn)}'\n"
         f"{external_id_line}"
@@ -429,6 +457,7 @@ def bootstrap_statements(base_uri: str, role_arn: str, external_id: str,
         f"    TABLE_FORMAT = ICEBERG\n"
         f"    ENABLED = TRUE",
         s3_storage_integration_sql(base_uri, role_arn, external_id),
+        s3_storage_integration_alter_sql(base_uri, role_arn, external_id),
         f"CREATE DATABASE IF NOT EXISTS {DB} COMMENT = '{DB_MARKER_COMMENT}'",
         f"CREATE SCHEMA IF NOT EXISTS {DB}.{ADMIN_SCHEMA}",
         f"CREATE FILE FORMAT IF NOT EXISTS {FILE_FORMAT} TYPE = JSON",
@@ -525,8 +554,10 @@ def render_bootstrap_tab(conn):
             "External ID (optional, if agreed with Atlan)",
             key="external_id",
             help="Set only if Atlan pre-configured the role trust policy with a "
-                 "fixed external ID; otherwise Snowflake generates one and you "
-                 "share it with Atlan after bootstrap.",
+                 "fixed external ID; otherwise Snowflake generates one per "
+                 "integration and you share both with Atlan after bootstrap. "
+                 "Re-running bootstrap with an external ID applies it to both "
+                 "the external volume (recreated) and the storage integration.",
         ).strip()
     with col2:
         serverless_label = "Serverless (recommended)"
