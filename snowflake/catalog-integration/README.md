@@ -121,7 +121,7 @@ Create a database linked to the catalog integration. Snowflake will automaticall
 CREATE DATABASE <database_name>
   LINKED_CATALOG = (
     CATALOG = '<integration_name>',
-    SYNC_INTERVAL_SECONDS = 3600
+    SYNC_INTERVAL_SECONDS = 10800
   )
   EXTERNAL_VOLUME = '<volume_name>';
 ```
@@ -151,6 +151,6 @@ SELECT SYSTEM$CATALOG_LINK_STATUS('<database_name>');
 
 - This approach uses Snowflake's native Iceberg REST Catalog federation — no external scripts or scheduled refresh jobs are needed.
 - The linked database automatically syncs table definitions from the Atlan Lakehouse catalog.
-- `REFRESH_INTERVAL_SECONDS = 900` refreshes table metadata every 15 minutes, and `SYNC_INTERVAL_SECONDS = 3600` discovers newly added tables every hour. Keep these values or higher — shorter intervals significantly increase load on the catalog.
+- `REFRESH_INTERVAL_SECONDS = 900` refreshes table metadata every 15 minutes, and `SYNC_INTERVAL_SECONDS = 10800` discovers newly added tables every 3 hours. Keep these values or higher — shorter intervals significantly increase load on the catalog.
 - All SQL commands require `ACCOUNTADMIN` or equivalent privileges.
 - The external volume is configured as read-only (`ALLOW_WRITES = FALSE`).
