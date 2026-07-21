@@ -2,6 +2,8 @@
 
 A native Snowflake Streamlit application that identifies stale Iceberg tables and provides an option to repair them by refreshing metadata and enabling auto-refresh.
 
+> For a step-by-step guide to diagnosing why tables stopped refreshing (and manual repair options), see the [auto-refresh troubleshooting guide](../catalog-integration/TROUBLESHOOTING.md).
+
 ## Features
 
 - **🔍 Find Stale Tables**: Identifies Iceberg tables that haven't been refreshed in the last N days
@@ -69,11 +71,11 @@ Follow these steps to set up the MDLH Table Refresh Repair app in your Snowflake
 3. Configure the **Days Threshold** (default: 1 day)
    - This determines how many days since last refresh to consider a table "stale"
 
-### Step 3: Find Stale Tables
+### Step 2: Find Stale Tables
 
 1. Click **"🔍 Find Stale Tables"**
 2. The app will query `INFORMATION_SCHEMA.TABLES` to find tables that:
-   - Have `ROW_COUNT > 0`
+   - Are Iceberg tables (`IS_ICEBERG = 'YES'`)
    - Have `LAST_ALTERED < DATEADD(day, -N, CURRENT_TIMESTAMP())`
 3. Results are displayed in a table showing:
    - Table Name
@@ -81,14 +83,15 @@ Follow these steps to set up the MDLH Table Refresh Repair app in your Snowflake
    - Days Since Refresh
    - Row Count
 
-### Step 4: Repair Tables
+### Step 3: Repair Tables
 
 1. **Select Tables**: Choose which tables to repair (default: all selected)
 2. **Preview SQL**: Click "Preview SQL Commands" to see what will be executed
 3. **Repair**: Click **"🔧 Repair Selected Tables"**
-4. The app will:
-   - Run `ALTER ICEBERG TABLE <db>.<schema>.<table> REFRESH` for each table
-   - Run `ALTER ICEBERG TABLE <db>.<schema>.<table> SET AUTO_REFRESH = TRUE` for each table
+4. For each table, the app will:
+   - Run `ALTER ICEBERG TABLE <db>.<schema>.<table> SET AUTO_REFRESH = FALSE` (manual refresh is rejected while auto-refresh is enabled)
+   - Run `ALTER ICEBERG TABLE <db>.<schema>.<table> REFRESH`
+   - Run `ALTER ICEBERG TABLE <db>.<schema>.<table> SET AUTO_REFRESH = TRUE`
 5. **View Results**: See success/failure status for each table
 
 ## SQL Queries Used
@@ -102,7 +105,7 @@ SELECT
     ROW_COUNT
 FROM <database>.INFORMATION_SCHEMA.TABLES
 WHERE TABLE_SCHEMA = '<schema>'
-  AND ROW_COUNT > 0
+  AND IS_ICEBERG = 'YES'
   AND LAST_ALTERED < DATEADD(day, -<days_threshold>, CURRENT_TIMESTAMP())
 ORDER BY LAST_ALTERED ASC
 ```
@@ -110,10 +113,13 @@ ORDER BY LAST_ALTERED ASC
 ### Repairing Each Table
 
 ```sql
+-- Disable auto-refresh (manual refresh is rejected while it is enabled)
+ALTER ICEBERG TABLE <database>.<schema>.<table> SET AUTO_REFRESH = FALSE;
+
 -- Refresh the table metadata
 ALTER ICEBERG TABLE <database>.<schema>.<table> REFRESH;
 
--- Enable auto-refresh
+-- Re-enable auto-refresh
 ALTER ICEBERG TABLE <database>.<schema>.<table> SET AUTO_REFRESH = TRUE;
 ```
 
@@ -122,15 +128,15 @@ ALTER ICEBERG TABLE <database>.<schema>.<table> SET AUTO_REFRESH = TRUE;
 ### Stale Table Detection
 
 The app identifies tables that:
-- Are Iceberg tables (detected via `INFORMATION_SCHEMA.TABLES`)
-- Have data (`ROW_COUNT > 0`)
+- Are Iceberg tables (`IS_ICEBERG = 'YES'` in `INFORMATION_SCHEMA.TABLES`)
 - Haven't been refreshed recently (`LAST_ALTERED < threshold`)
 
 ### Repair Operation
 
 For each selected table, the app:
-1. **Refreshes metadata**: Updates the table's metadata from the Iceberg catalog
-2. **Enables auto-refresh**: Sets `AUTO_REFRESH = TRUE` so the table stays up-to-date automatically
+1. **Disables auto-refresh**: Snowflake rejects manual refresh while auto-refresh is enabled
+2. **Refreshes metadata**: Updates the table's metadata from the Iceberg catalog
+3. **Re-enables auto-refresh**: Sets `AUTO_REFRESH = TRUE` so the table stays up-to-date automatically
 
 ### Results Display
 
