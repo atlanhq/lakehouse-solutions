@@ -85,6 +85,8 @@ ALTER ICEBERG TABLE <database_name>."<schema_name>"."<table_name>" REFRESH;
 ALTER ICEBERG TABLE <database_name>."<schema_name>"."<table_name>" SET AUTO_REFRESH = TRUE;
 ```
 
+> **Important:** If the `REFRESH` statement fails, still run the final `SET AUTO_REFRESH = TRUE` statement. Otherwise the table is left with auto-refresh explicitly disabled — a worse state than the suspended one you started from — and Snowflake will never resume it on its own.
+
 If many tables are affected, generate the repair statements for the whole schema and run the output:
 
 ```sql

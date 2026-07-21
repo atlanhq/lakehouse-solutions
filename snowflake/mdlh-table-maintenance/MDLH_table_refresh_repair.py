@@ -3,6 +3,8 @@ Snowflake Native Streamlit App - MDLH Table Refresh Repair
 Identifies stale MDLH Iceberg tables and provides option to refresh them
 """
 
+import re
+
 import streamlit as st
 import pandas as pd
 from typing import List, Dict, Tuple
@@ -137,12 +139,29 @@ def repair_statements(database: str, schema: str, table_name: str) -> Tuple[str,
 
 def repair_table(conn, database: str, schema: str, table_name: str) -> Tuple[bool, str]:
     """Repair a single table by refreshing it and enabling auto-refresh."""
+    disable_stmt, refresh_stmt, enable_stmt = repair_statements(database, schema, table_name)
     try:
-        for statement in repair_statements(database, schema, table_name):
-            execute_query(conn, statement)
-        return True, "Success"
+        execute_query(conn, disable_stmt)
+        execute_query(conn, refresh_stmt)
     except Exception as e:
+        # Don't leave the table with auto-refresh explicitly disabled — before
+        # the repair it was merely suspended, which is a less-broken state
+        try:
+            execute_query(conn, enable_stmt)
+        except Exception:
+            return False, (
+                f"{e} (auto-refresh could not be re-enabled — run "
+                f"{enable_stmt} manually)"
+            )
         return False, str(e)
+    try:
+        execute_query(conn, enable_stmt)
+    except Exception as e:
+        return False, (
+            f"Refresh succeeded but auto-refresh could not be re-enabled: {e} "
+            f"(run {enable_stmt} manually)"
+        )
+    return True, "Success"
 
 # ============================================================================
 # Main App
@@ -195,9 +214,13 @@ def main():
             help="Enter the database name to check for stale tables",
             key="database_name"
         ).strip()
-        # Accept a pre-quoted name typed by the user, e.g. "my_db"
+        # Mirror Snowflake identifier resolution: a pre-quoted name ("my_db")
+        # is matched exactly; a plain name resolves case-insensitively, i.e.
+        # it is stored uppercase, so uppercase it before we quote it
         if len(database_name) >= 2 and database_name.startswith('"') and database_name.endswith('"'):
-            database_name = database_name[1:-1]
+            database_name = database_name[1:-1].replace('""', '"')
+        elif re.fullmatch(r'[A-Za-z_][A-Za-z0-9_$]*', database_name):
+            database_name = database_name.upper()
     
     with col2:
         # Load schemas when database is provided
