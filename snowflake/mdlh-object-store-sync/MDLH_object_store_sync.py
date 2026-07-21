@@ -477,16 +477,15 @@ def render_bootstrap_tab(conn):
         return
 
     env = st.text_input(
-        "Environment name (optional)",
+        "Resource name suffix (optional)",
         key="bootstrap_env",
-        help="Leave blank for the default environment (atlan_context_store "
-             "database, atlan_mdlh_* resources). Set a short lowercase name, "
-             "e.g. 'prod', to create an independent setup "
-             "(atlan_context_store_prod / atlan_mdlh_prod_*) alongside "
-             "others in this account.",
+        help="Leave blank for the default names (atlan_context_store database, "
+             "atlan_mdlh_* resources). A suffix like 'prod' names every "
+             "resource with it (atlan_context_store_prod, atlan_mdlh_prod_*), "
+             "so several independent setups can coexist in one account.",
     ).strip().lower()
     if env and not ENV_NAME_PATTERN.match(env):
-        st.warning("Environment name must be 1-20 characters: a-z, 0-9, underscore.")
+        st.warning("Suffix must be 1-20 characters: a-z, 0-9, underscore.")
         return
     set_environment(env)
 
@@ -835,7 +834,10 @@ def main():
     environments = discover_environments(conn)
     if environments:
         labels = ["default" if e == "" else e for e in environments]
-        choice = st.selectbox("Environment", options=labels, key="environment_choice")
+        choice = st.selectbox(
+            "Setup", options=labels, key="environment_choice",
+            help="Setups are distinguished by their resource name suffix.",
+        )
         selected_env = "" if choice == "default" else choice
     else:
         selected_env = ""

@@ -34,7 +34,7 @@ The tables land in the `atlan_context_store` database; every other resource the 
 | Storage integration | `atlan_mdlh_storage_integration` |
 | Stage, file format, config table, sync procedure, sync task | `atlan_context_store.atlan_mdlh_admin.*` |
 
-To run several independent setups in one account (for example separate Atlan tenants), give each bootstrap an **environment name**: environment `prod` creates `atlan_context_store_prod` and `atlan_mdlh_prod_*` resources. The app rediscovers every environment on startup — the environment database carries a marker comment — so nothing has to be re-entered, and an environment picker appears whenever more than one exists.
+To run several independent setups in one account (for example separate Atlan tenants), give each bootstrap a **resource name suffix**: suffix `prod` creates `atlan_context_store_prod` and `atlan_mdlh_prod_*` resources. The app rediscovers every setup on startup — the database carries a marker comment — so nothing has to be re-entered, and a setup picker appears whenever more than one exists.
 
 ## Prerequisites
 
