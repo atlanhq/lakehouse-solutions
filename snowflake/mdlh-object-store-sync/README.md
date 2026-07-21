@@ -24,17 +24,17 @@ The app reads these through a Snowflake stage (IAM only — no external access i
 
 A stored procedure runs the same sync on a schedule via a Snowflake task, so pointers stay current without anyone opening the app.
 
-All Snowflake resources the app creates are prefixed `atlan_mdlh_`:
+The tables land in the `atlan_context_store` database; every other resource the app creates is prefixed `atlan_mdlh_`:
 
 | Resource | Name |
 |---|---|
+| Database | `atlan_context_store` |
 | External volume | `atlan_mdlh_external_volume` |
 | Catalog integration (object store) | `atlan_mdlh_catalog_integration` |
 | Storage integration | `atlan_mdlh_storage_integration` |
-| Database | `atlan_mdlh_lakehouse` |
-| Stage, file format, config table, sync procedure, sync task | `atlan_mdlh_lakehouse.atlan_mdlh_admin.*` |
+| Stage, file format, config table, sync procedure, sync task | `atlan_context_store.atlan_mdlh_admin.*` |
 
-To run several independent setups in one account (for example separate Atlan tenants), give each bootstrap an **environment name**: environment `prod` creates `atlan_mdlh_prod_*` resources. The app rediscovers every environment on startup — the environment database carries a marker comment — so nothing has to be re-entered, and an environment picker appears whenever more than one exists.
+To run several independent setups in one account (for example separate Atlan tenants), give each bootstrap an **environment name**: environment `prod` creates `atlan_context_store_prod` and `atlan_mdlh_prod_*` resources. The app rediscovers every environment on startup — the environment database carries a marker comment — so nothing has to be re-entered, and an environment picker appears whenever more than one exists.
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ To run several independent setups in one account (for example separate Atlan ten
 
 ## Setup
 
-1. In the Snowflake web interface, select **Projects** → **Streamlit**, create a new app on a database **other than** `atlan_mdlh_lakehouse`, and paste in `MDLH_object_store_sync.py`.
+1. In the Snowflake web interface, select **Projects** → **Streamlit**, create a new app on a database **other than** `atlan_context_store`, and paste in `MDLH_object_store_sync.py`.
 2. On the **Bootstrap** tab, enter the base URL and IAM role ARN from Atlan, pick a warehouse for the sync task from the dropdown (or keep the serverless default), and set the sync interval. Preview the SQL, then run the bootstrap.
 3. **Share with Atlan**: after bootstrap the app shows the Snowflake-generated IAM user ARN and external ID for both the external volume and the storage integration. Atlan adds these to the role's trust policy.
 4. Click **Verify Access** — it validates the external volume and lists the pointer files. If no pointer files are found, ask Atlan to enable the metadata pointer workflow for your tenant.

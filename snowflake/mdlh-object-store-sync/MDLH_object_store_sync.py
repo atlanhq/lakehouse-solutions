@@ -29,12 +29,14 @@ SYNC_CORE = r'''
 import json
 
 BASE_PREFIX = "atlan_mdlh"
+DB_BASE_NAME = "atlan_context_store"
 
 def set_environment(env=""):
     """Bind every resource name for one environment (empty = default).
 
-    All resources keep the atlan_mdlh_ prefix; an optional environment
-    suffix (e.g. 'prod' -> atlan_mdlh_prod_*) allows several independent
+    The database is atlan_context_store; every other resource keeps the
+    atlan_mdlh_ prefix. An optional environment suffix (e.g. 'prod' ->
+    atlan_context_store_prod / atlan_mdlh_prod_*) allows several independent
     setups in one Snowflake account. The app rediscovers environments from
     the marker comment on the database, so nothing has to be re-typed.
     """
@@ -43,7 +45,7 @@ def set_environment(env=""):
     global STORAGE_INTEGRATION
     ENV = env or ""
     PREFIX = BASE_PREFIX + (f"_{ENV}" if ENV else "")
-    DB = f"{PREFIX}_lakehouse"
+    DB = DB_BASE_NAME + (f"_{ENV}" if ENV else "")
     ADMIN_SCHEMA = f"{PREFIX}_admin"
     CONFIG_TABLE = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_config"
     STAGE = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_pointer_stage"
@@ -307,8 +309,10 @@ def discover_environments(conn) -> List[str]:
         if row["comment"] != DB_MARKER_COMMENT:
             continue
         name = str(row["name"]).lower()
-        if name.startswith(BASE_PREFIX) and name.endswith("_lakehouse"):
-            envs.append(name[len(BASE_PREFIX):-len("_lakehouse")].strip("_"))
+        if name == DB_BASE_NAME:
+            envs.append("")
+        elif name.startswith(DB_BASE_NAME + "_"):
+            envs.append(name[len(DB_BASE_NAME) + 1:])
     return sorted(set(envs))
 
 def list_warehouses(conn) -> List[str]:
@@ -475,9 +479,11 @@ def render_bootstrap_tab(conn):
     env = st.text_input(
         "Environment name (optional)",
         key="bootstrap_env",
-        help="Leave blank for the default environment (atlan_mdlh_*). Set a "
-             "short lowercase name, e.g. 'prod', to create an independent "
-             "setup named atlan_mdlh_prod_* alongside others in this account.",
+        help="Leave blank for the default environment (atlan_context_store "
+             "database, atlan_mdlh_* resources). Set a short lowercase name, "
+             "e.g. 'prod', to create an independent setup "
+             "(atlan_context_store_prod / atlan_mdlh_prod_*) alongside "
+             "others in this account.",
     ).strip().lower()
     if env and not ENV_NAME_PATTERN.match(env):
         st.warning("Environment name must be 1-20 characters: a-z, 0-9, underscore.")
