@@ -103,7 +103,8 @@ def relative_metadata_path(metadata_location, base_url):
     if not metadata_location.startswith(base_url):
         raise ValueError(
             f"metadataLocation {metadata_location} is outside the configured "
-            f"base URL {base_url}"
+            f"base URL {base_url} — check that the base URL matches the "
+            f"scheme, bucket, and path in the pointer files exactly"
         )
     return metadata_location[len(base_url):]
 
@@ -114,8 +115,14 @@ def list_existing_tables(session, namespace):
         rows = session.sql(
             f"SHOW ICEBERG TABLES IN SCHEMA {DB}.{quote_ident(schema)}"
         ).collect()
-    except Exception:
-        return set()  # schema does not exist yet
+    except Exception as e:
+        # Only a missing schema means "no tables yet". Anything else must
+        # fail the plan: treating it as empty would turn every REFRESH into
+        # a CREATE IF NOT EXISTS, which no-ops on existing tables and lets
+        # them silently go stale while the sync reports success.
+        if "does not exist" in str(e).lower():
+            return set()
+        raise
     return {row["name"] for row in rows}
 
 def plan_sync(session, config):
@@ -174,7 +181,15 @@ def plan_sync(session, config):
                     ),
                 })
             else:
-                current = current_metadata_location(session, fqn)
+                try:
+                    current = current_metadata_location(session, fqn)
+                except Exception as e:
+                    actions.append({
+                        "action": "ERROR", "namespace": namespace, "table": name,
+                        "detail": f"could not read current metadata location: {e}",
+                        "sql": "",
+                    })
+                    continue
                 if current == tp["metadataLocation"]:
                     actions.append({"action": "UP_TO_DATE", "namespace": namespace,
                                     "table": name, "detail": "", "sql": ""})
@@ -277,8 +292,9 @@ def get_snowflake_connection():
     st.info("This app must be deployed as a native Snowflake Streamlit app to work properly.")
     return None
 
-def execute_statements(conn, statements: List[str], on_progress=None) -> List[Dict]:
-    """Run DDL statements in order; stop at the first failure."""
+def execute_statements(conn, statements: List[str], on_progress=None,
+                       stop_on_error: bool = True) -> List[Dict]:
+    """Run DDL statements in order; stop at the first failure by default."""
     results = []
     for idx, statement in enumerate(statements):
         if on_progress:
@@ -288,7 +304,8 @@ def execute_statements(conn, statements: List[str], on_progress=None) -> List[Di
             results.append({"statement": statement, "status": "OK", "message": ""})
         except Exception as e:
             results.append({"statement": statement, "status": "FAILED", "message": str(e)})
-            break
+            if stop_on_error:
+                break
     return results
 
 def try_load_config(conn) -> Dict:
@@ -392,8 +409,10 @@ def sync_task_sql(warehouse: str, schedule_minutes: int) -> str:
         compute_line = f"    WAREHOUSE = {quote_ident(warehouse)}\n"
     else:
         compute_line = "    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'\n"
+    # OR REPLACE so a re-bootstrap picks up a changed schedule or warehouse;
+    # the replaced task comes back suspended, which the success message covers
     return (
-        f"CREATE TASK IF NOT EXISTS {SYNC_TASK}\n"
+        f"CREATE OR REPLACE TASK {SYNC_TASK}\n"
         f"{compute_line}"
         f"    SCHEDULE = '{int(schedule_minutes)} MINUTE'\n"
         f"AS CALL {SYNC_PROCEDURE}()"
@@ -463,9 +482,10 @@ def fetch_trust_info(conn) -> List[Dict]:
 def render_bootstrap_tab(conn):
     st.header("Bootstrap")
     st.markdown(
-        "Creates every Snowflake resource the integration needs (all prefixed "
-        "`atlan_mdlh_`): an external volume and object-store catalog integration "
-        "for the Iceberg tables, a storage integration and stage for reading the "
+        "Creates every Snowflake resource the integration needs — the "
+        "`atlan_context_store` database plus `atlan_mdlh_`-prefixed resources: "
+        "an external volume and object-store catalog integration for the "
+        "Iceberg tables, a storage integration and stage for reading the "
         "pointer files, and a stored procedure plus scheduled task for the "
         "periodic sync. The base URL and IAM role are provided by Atlan."
     )
@@ -566,10 +586,13 @@ def render_bootstrap_tab(conn):
         results = execute_statements(conn, statements, _on_progress)
         progress_bar.empty()
         progress_text.empty()
-        st.session_state.bootstrap_results = results
+        # Keyed by suffix so results (and the trust panel) never render
+        # against a different setup than the one that was bootstrapped
+        st.session_state.bootstrap_results = {"env": env, "results": results}
 
-    if st.session_state.get("bootstrap_results"):
-        results = st.session_state.bootstrap_results
+    saved = st.session_state.get("bootstrap_results")
+    if saved and saved.get("env") == env:
+        results = saved["results"]
         failed = [r for r in results if r["status"] == "FAILED"]
         if failed:
             st.error(f"Bootstrap stopped at statement {len(results)} of {len(statements)}.")
@@ -801,11 +824,17 @@ def render_teardown_tab(conn, env):
             f"DROP EXTERNAL VOLUME IF EXISTS {EXTERNAL_VOLUME}",
             f"DROP STORAGE INTEGRATION IF EXISTS {STORAGE_INTEGRATION}",
         ]
-        results = execute_statements(conn, statements)
-        failed = [r for r in results if r["status"] == "FAILED"]
+        # Keep going past failures so a partially-torn-down setup (e.g. the
+        # database already dropped) still releases the account-level
+        # integrations; "does not exist" just means already gone
+        results = execute_statements(conn, statements, stop_on_error=False)
+        failed = [r for r in results if r["status"] == "FAILED"
+                  and "does not exist" not in r["message"].lower()]
         if failed:
-            st.error(f"Teardown stopped: {failed[0]['message']}")
-            st.code(failed[0]["statement"], language="sql")
+            st.error(f"{len(failed)} statement(s) failed:")
+            for failure in failed:
+                st.code(failure["statement"], language="sql")
+                st.error(failure["message"])
         else:
             st.success("All resources dropped.")
 
