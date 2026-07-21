@@ -154,3 +154,7 @@ SELECT SYSTEM$CATALOG_LINK_STATUS('<database_name>');
 - `REFRESH_INTERVAL_SECONDS = 900` refreshes table metadata every 15 minutes, and `SYNC_INTERVAL_SECONDS = 3600` discovers newly added tables every hour. Keep these values or higher — shorter intervals significantly increase load on the catalog.
 - All SQL commands require `ACCOUNTADMIN` or equivalent privileges.
 - The external volume is configured as read-only (`ALLOW_WRITES = FALSE`).
+
+## Troubleshooting
+
+If tables in the linked database stop refreshing and serve stale data, see the [auto-refresh troubleshooting guide](./TROUBLESHOOTING.md).
