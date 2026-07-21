@@ -34,6 +34,8 @@ All Snowflake resources the app creates are prefixed `atlan_mdlh_`:
 | Database | `atlan_mdlh_lakehouse` |
 | Stage, file format, config table, sync procedure, sync task | `atlan_mdlh_lakehouse.atlan_mdlh_admin.*` |
 
+To run several independent setups in one account (for example separate Atlan tenants), give each bootstrap an **environment name**: environment `prod` creates `atlan_mdlh_prod_*` resources. The app rediscovers every environment on startup — the environment database carries a marker comment — so nothing has to be re-entered, and an environment picker appears whenever more than one exists.
+
 ## Prerequisites
 
 - From Atlan: the **S3 base URL** (catalog root) and the **IAM role ARN** Snowflake will assume. The role needs `s3:GetObject` and `s3:ListBucket` scoped to the catalog root.
@@ -43,7 +45,7 @@ All Snowflake resources the app creates are prefixed `atlan_mdlh_`:
 ## Setup
 
 1. In the Snowflake web interface, select **Projects** → **Streamlit**, create a new app on a database **other than** `atlan_mdlh_lakehouse`, and paste in `MDLH_object_store_sync.py`.
-2. On the **Bootstrap** tab, enter the base URL and IAM role ARN from Atlan, optionally a warehouse for the sync task (blank = serverless), and the sync interval. Preview the SQL, then run the bootstrap.
+2. On the **Bootstrap** tab, enter the base URL and IAM role ARN from Atlan, pick a warehouse for the sync task from the dropdown (or keep the serverless default), and set the sync interval. Preview the SQL, then run the bootstrap.
 3. **Share with Atlan**: after bootstrap the app shows the Snowflake-generated IAM user ARN and external ID for both the external volume and the storage integration. Atlan adds these to the role's trust policy.
 4. Click **Verify Access** — it validates the external volume and lists the pointer files. If no pointer files are found, ask Atlan to enable the metadata pointer workflow for your tenant.
 5. On the **Sync** tab, run **Plan Sync** to see what will be created, then **Apply Plan**.

@@ -28,16 +28,33 @@ from typing import Dict, List
 SYNC_CORE = r'''
 import json
 
-DB = "atlan_mdlh_lakehouse"
-ADMIN_SCHEMA = "atlan_mdlh_admin"
-CONFIG_TABLE = f"{DB}.{ADMIN_SCHEMA}.atlan_mdlh_config"
-STAGE = f"{DB}.{ADMIN_SCHEMA}.atlan_mdlh_pointer_stage"
-FILE_FORMAT = f"{DB}.{ADMIN_SCHEMA}.atlan_mdlh_json_format"
-SYNC_PROCEDURE = f"{DB}.{ADMIN_SCHEMA}.atlan_mdlh_sync"
-SYNC_TASK = f"{DB}.{ADMIN_SCHEMA}.atlan_mdlh_sync_task"
-EXTERNAL_VOLUME = "atlan_mdlh_external_volume"
-CATALOG_INTEGRATION = "atlan_mdlh_catalog_integration"
-STORAGE_INTEGRATION = "atlan_mdlh_storage_integration"
+BASE_PREFIX = "atlan_mdlh"
+
+def set_environment(env=""):
+    """Bind every resource name for one environment (empty = default).
+
+    All resources keep the atlan_mdlh_ prefix; an optional environment
+    suffix (e.g. 'prod' -> atlan_mdlh_prod_*) allows several independent
+    setups in one Snowflake account. The app rediscovers environments from
+    the marker comment on the database, so nothing has to be re-typed.
+    """
+    global ENV, PREFIX, DB, ADMIN_SCHEMA, CONFIG_TABLE, STAGE, FILE_FORMAT
+    global SYNC_PROCEDURE, SYNC_TASK, EXTERNAL_VOLUME, CATALOG_INTEGRATION
+    global STORAGE_INTEGRATION
+    ENV = env or ""
+    PREFIX = BASE_PREFIX + (f"_{ENV}" if ENV else "")
+    DB = f"{PREFIX}_lakehouse"
+    ADMIN_SCHEMA = f"{PREFIX}_admin"
+    CONFIG_TABLE = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_config"
+    STAGE = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_pointer_stage"
+    FILE_FORMAT = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_json_format"
+    SYNC_PROCEDURE = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_sync"
+    SYNC_TASK = f"{DB}.{ADMIN_SCHEMA}.{PREFIX}_sync_task"
+    EXTERNAL_VOLUME = f"{PREFIX}_external_volume"
+    CATALOG_INTEGRATION = f"{PREFIX}_catalog_integration"
+    STORAGE_INTEGRATION = f"{PREFIX}_storage_integration"
+
+set_environment("")
 
 INDEX_PATH = "_latest/_index.json"
 INDEX_TYPE = "atlan-lh-object-store-metadata-index"
@@ -222,6 +239,10 @@ st.set_page_config(
 )
 
 AWS_ROLE_ARN_PATTERN = re.compile(r"^arn:aws(-[a-z]+)?:iam::\d{12}:role/.+$")
+ENV_NAME_PATTERN = re.compile(r"^[a-z0-9_]{1,20}$")
+
+# Marker comment on the environment database; used to rediscover environments
+DB_MARKER_COMMENT = "atlan-mdlh-object-store-sync"
 
 # Provider registry — S3 implemented; add builders here for GCS / Azure ADLS
 PROVIDERS = {
@@ -274,6 +295,28 @@ def try_load_config(conn) -> Dict:
     except Exception:
         return {}
 
+def discover_environments(conn) -> List[str]:
+    """Environment suffixes of every bootstrap in this account, found via the
+    marker comment on the environment database ('' = the default one)."""
+    try:
+        rows = conn.sql("SHOW DATABASES").collect()
+    except Exception:
+        return []
+    envs = []
+    for row in rows:
+        if row["comment"] != DB_MARKER_COMMENT:
+            continue
+        name = str(row["name"]).lower()
+        if name.startswith(BASE_PREFIX) and name.endswith("_lakehouse"):
+            envs.append(name[len(BASE_PREFIX):-len("_lakehouse")].strip("_"))
+    return sorted(set(envs))
+
+def list_warehouses(conn) -> List[str]:
+    try:
+        return [row["name"] for row in conn.sql("SHOW WAREHOUSES").collect()]
+    except Exception:
+        return []
+
 # ============================================================================
 # Bootstrap SQL builders (S3)
 # ============================================================================
@@ -286,7 +329,7 @@ def s3_external_volume_sql(base_url: str, role_arn: str, external_id: str) -> st
     return (
         f"CREATE EXTERNAL VOLUME IF NOT EXISTS {EXTERNAL_VOLUME}\n"
         f"    STORAGE_LOCATIONS = ((\n"
-        f"        NAME = 'atlan_mdlh_s3_location'\n"
+        f"        NAME = '{PREFIX}_s3_location'\n"
         f"        STORAGE_PROVIDER = 'S3'\n"
         f"        STORAGE_BASE_URL = '{sql_literal(base_url)}'\n"
         f"        STORAGE_AWS_ROLE_ARN = '{sql_literal(role_arn)}'\n"
@@ -311,7 +354,9 @@ def s3_storage_integration_sql(base_url: str, role_arn: str, external_id: str) -
     )
 
 def sync_procedure_sql() -> str:
+    # Pin the procedure to its environment (ENV is validated to [a-z0-9_])
     body = SYNC_CORE + (
+        f"\nset_environment('{ENV}')\n"
         "\n"
         "def run(session):\n"
         "    config = load_config(session)\n"
@@ -361,7 +406,7 @@ def bootstrap_statements(base_url: str, role_arn: str, external_id: str,
         f"    TABLE_FORMAT = ICEBERG\n"
         f"    ENABLED = TRUE",
         s3_storage_integration_sql(base_url, role_arn, external_id),
-        f"CREATE DATABASE IF NOT EXISTS {DB}",
+        f"CREATE DATABASE IF NOT EXISTS {DB} COMMENT = '{DB_MARKER_COMMENT}'",
         f"CREATE SCHEMA IF NOT EXISTS {DB}.{ADMIN_SCHEMA}",
         f"CREATE FILE FORMAT IF NOT EXISTS {FILE_FORMAT} TYPE = JSON",
         f"CREATE STAGE IF NOT EXISTS {STAGE}\n"
@@ -427,6 +472,18 @@ def render_bootstrap_tab(conn):
         st.info("Only S3 is supported at the moment. GCS and Azure ADLS are planned.")
         return
 
+    env = st.text_input(
+        "Environment name (optional)",
+        key="bootstrap_env",
+        help="Leave blank for the default environment (atlan_mdlh_*). Set a "
+             "short lowercase name, e.g. 'prod', to create an independent "
+             "setup named atlan_mdlh_prod_* alongside others in this account.",
+    ).strip().lower()
+    if env and not ENV_NAME_PATTERN.match(env):
+        st.warning("Environment name must be 1-20 characters: a-z, 0-9, underscore.")
+        return
+    set_environment(env)
+
     col1, col2 = st.columns(2)
     with col1:
         base_url = st.text_input(
@@ -447,13 +504,16 @@ def render_bootstrap_tab(conn):
                  "share it with Atlan after bootstrap.",
         ).strip()
     with col2:
-        warehouse = st.text_input(
-            "Warehouse for the scheduled sync task (blank = serverless)",
+        serverless_label = "Serverless (recommended)"
+        warehouse_choice = st.selectbox(
+            "Warehouse for the scheduled sync task",
+            options=[serverless_label] + list_warehouses(conn),
             key="task_warehouse",
             help="The refresh is a metadata-only operation, so a serverless "
                  "task (requires the EXECUTE MANAGED TASK privilege) or an "
                  "XS warehouse is sufficient.",
-        ).strip()
+        )
+        warehouse = "" if warehouse_choice == serverless_label else warehouse_choice
         schedule_minutes = st.number_input(
             "Sync interval (minutes)", min_value=5, max_value=1440, value=120,
             key="schedule_minutes",
@@ -558,7 +618,8 @@ def render_trust_section(conn):
 # UI: Sync tab
 # ============================================================================
 
-def render_sync_tab(conn):
+def render_sync_tab(conn, env):
+    set_environment(env)
     st.header("Sync")
     config = try_load_config(conn)
     if not config.get("base_url"):
@@ -646,7 +707,8 @@ def render_sync_tab(conn):
 # UI: Scheduled sync tab
 # ============================================================================
 
-def render_scheduled_tab(conn):
+def render_scheduled_tab(conn, env):
+    set_environment(env)
     st.header("Scheduled Sync")
     st.markdown(
         f"A Snowflake task (`{SYNC_TASK}`) calls the sync procedure on a fixed "
@@ -656,7 +718,7 @@ def render_scheduled_tab(conn):
 
     try:
         tasks = conn.sql(
-            f"SHOW TASKS LIKE 'atlan_mdlh_sync_task' IN SCHEMA {DB}.{ADMIN_SCHEMA}"
+            f"SHOW TASKS LIKE '{PREFIX}_sync_task' IN SCHEMA {DB}.{ADMIN_SCHEMA}"
         ).collect()
     except Exception:
         tasks = []
@@ -693,7 +755,7 @@ def render_scheduled_tab(conn):
         history = conn.sql(
             f"SELECT scheduled_time, state, completed_time, return_value, error_message "
             f"FROM TABLE({DB}.INFORMATION_SCHEMA.TASK_HISTORY("
-            f"TASK_NAME => 'ATLAN_MDLH_SYNC_TASK')) "
+            f"TASK_NAME => '{PREFIX.upper()}_SYNC_TASK')) "
             f"ORDER BY scheduled_time DESC LIMIT 20"
         ).collect()
         if history:
@@ -708,7 +770,8 @@ def render_scheduled_tab(conn):
 # UI: Teardown tab
 # ============================================================================
 
-def render_teardown_tab(conn):
+def render_teardown_tab(conn, env):
+    set_environment(env)
     st.header("Teardown")
     st.markdown(
         f"Removes everything the app created: the `{DB}` database (including all "
@@ -761,17 +824,32 @@ def main():
     if conn is None:
         return
 
+    # Environments are rediscovered from the marker comment on their database,
+    # so a custom-named setup is found again without re-typing anything
+    environments = discover_environments(conn)
+    if environments:
+        labels = ["default" if e == "" else e for e in environments]
+        choice = st.selectbox("Environment", options=labels, key="environment_choice")
+        selected_env = "" if choice == "default" else choice
+    else:
+        selected_env = ""
+
+    if st.session_state.get("active_env") != selected_env:
+        st.session_state.active_env = selected_env
+        st.session_state.sync_plan = None
+        st.session_state.sync_results = []
+
     bootstrap_tab, sync_tab, scheduled_tab, teardown_tab = st.tabs(
         ["Bootstrap", "Sync", "Scheduled Sync", "Teardown"]
     )
     with bootstrap_tab:
         render_bootstrap_tab(conn)
     with sync_tab:
-        render_sync_tab(conn)
+        render_sync_tab(conn, selected_env)
     with scheduled_tab:
-        render_scheduled_tab(conn)
+        render_scheduled_tab(conn, selected_env)
     with teardown_tab:
-        render_teardown_tab(conn)
+        render_teardown_tab(conn, selected_env)
 
 
 if __name__ == "__main__":
