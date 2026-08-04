@@ -665,10 +665,11 @@ def render_trust_section(conn):
             # functions like SYSTEM$VERIFY_EXTERNAL_VOLUME (error 090237).
             if "side effects" in str(e):
                 st.warning(
-                    "Snowflake does not allow the external volume check to "
-                    "run inside this app when it runs with owner's rights. "
-                    "Use **Verify in a Worksheet** to run it manually — the "
-                    "pointer stage check below is unaffected."
+                    "Snowflake blocks the external volume check in apps on "
+                    "the warehouse runtime (they run as owner's-rights "
+                    "stored procedures). Use **Verify in a Worksheet** to "
+                    "run it manually, or recreate this app on the container "
+                    "runtime. The pointer stage check below is unaffected."
                 )
             else:
                 st.error(f"External volume verification failed: {e}")
