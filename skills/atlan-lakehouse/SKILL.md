@@ -37,7 +37,7 @@ The **Atlan Lakehouse** is an Apache Iceberg-based data lakehouse that stores me
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GOLD`             | **Start here for asset metadata queries.** Curated star-schema layer with pre-joined tables for simplified analytics. Central `ASSETS` table joined to detail tables (`RELATIONAL_ASSET_DETAILS`, `GLOSSARY_DETAILS`, `DATA_QUALITY_DETAILS`, `PIPELINE_DETAILS`, `BI_ASSET_DETAILS`, `DATA_MESH_DETAILS`) via `guid`. Does **not** contain tags, custom metadata, readmes, or lineage — use `ENTITY_METADATA` for those. |
 | `ENTITY_METADATA`  | Catalog metadata: one table per asset type in Atlan's metamodel (e.g., `TABLE`, `COLUMN`, `VIEW`, `GLOSSARYTERM`, `DBTMODEL`, `DATADOMAIN`, etc.), plus relationship/consolidated tables like `TAGS`, `CUSTOM_METADATA`, `GLOSSARY_DETAILS`, `README`, `DATA_MESH_DETAILS`, and lineage process tables (`PROCESS`, `COLUMN_PROCESS`, `BI_PROCESS`). Named `atlan-ns` on tenants onboarded before February 2026. **Important:** There is one table per asset type — the supertype tables (e.g., `ASSET`, `SQL`, `BI`, `SAAS`, `CLOUD`) are structural parents in Atlan's type hierarchy and typically have 0 rows. Query the specific type table that matches the assets you need (e.g., `TABLE` for Table assets, `COLUMN` for Column assets). Many tables will also have 0 rows if the tenant does not use that connector — for example, `AIRFLOWDAG` is empty if the tenant does not use Airflow. This is expected. |
-| `ENTITY_HISTORY`   | Historical snapshots mirroring every table in `ENTITY_METADATA`, with added `snapshot_timestamp` and `snapshot_date` columns for temporal analysis, change tracking, and audit trails. |
+| `ENTITY_HISTORY`   | Historical snapshots mirroring every table in `ENTITY_METADATA`. **Table names carry a `_history` suffix** (e.g. `Table_history`, not `Table`) — querying the unsuffixed name returns `NoSuchTableException`. Adds a `snapshot_date` (date) column for temporal analysis, change tracking, and audit trails. There is no `snapshot_timestamp` column. |
 | `USAGE_ANALYTICS`  | Product telemetry: page views, user actions, and user identity snapshots.                                                                   |
 | `OBSERVABILITY`    | Workflow and job execution metrics. Contains a single table `JOB_METRICS` with lifecycle timestamps, status codes, and workflow-specific `custom_metrics` (JSON). Use to track DQ scores, job success/failure rates, retry patterns, and pipeline duration. |
 
@@ -141,7 +141,7 @@ After determining your platform, choose the right namespace for the query. Follo
    → **`OBSERVABILITY` namespace** (`JOB_METRICS`).
 
 6. **Historical/temporal changes** (audit trails, point-in-time snapshots)?
-   → **`ENTITY_HISTORY` namespace** (mirrors `ENTITY_METADATA` with `snapshot_timestamp` / `snapshot_date`).
+   → **`ENTITY_HISTORY` namespace** (mirrors `ENTITY_METADATA` with a `_history` table-name suffix, plus `snapshot_date`).
 
 ## Connecting to the Atlan Lakehouse
 
@@ -194,8 +194,10 @@ For generic Python environments (Claude Code, notebooks, scripts), connect via t
 #### Python Dependencies
 
 ```bash
-python -c "import pyiceberg" 2>/dev/null || uv pip install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas 2>/dev/null || pip install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas 2>/dev/null || pip3 install "pyiceberg[s3fs,adlfs,gcsfs]" pyarrow pandas
+python -c "import pyiceberg" 2>/dev/null || uv pip install "pyiceberg[s3fs,adlfs,gcsfs]>=0.9,<0.11" pyarrow pandas 2>/dev/null || pip install "pyiceberg[s3fs,adlfs,gcsfs]>=0.9,<0.11" pyarrow pandas 2>/dev/null || pip3 install "pyiceberg[s3fs,adlfs,gcsfs]>=0.9,<0.11" pyarrow pandas
 ```
+
+> **Keep `pyiceberg` below 0.11.** 0.11.0 fails inside `load_catalog()` while parsing Polaris's `/v1/config` response (`ValidationError: 'PUT' is not a valid HttpMethod`). 0.11.1 connects, but every `.scan()` then fails with `AWS Error NETWORK_CONNECTION ... curlCode: 28`, because Polaris does not vend `s3.region` and pyarrow's default AWS SDK timeouts are too short to survive the region lookup — recovering on 0.11.1 requires setting `s3.connect-timeout` and `s3.request-timeout` on the catalog as well. 0.10.0 works with no additional configuration.
 
 #### Required Credentials
 
