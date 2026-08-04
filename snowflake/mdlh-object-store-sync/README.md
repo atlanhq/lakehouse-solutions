@@ -47,7 +47,7 @@ To run several independent setups in one account (for example separate Atlan ten
 1. In the Snowflake web interface, select **Projects** → **Streamlit**, create a new app on a database **other than** `atlan_context_store`, and paste in `MDLH_object_store_sync.py`.
 2. On the **Bootstrap** tab, enter the base URI and IAM role ARN from Atlan, pick a warehouse for the sync task from the dropdown (or keep the serverless default), and set the sync interval. Preview the SQL, then run the bootstrap.
 3. **Share with Atlan**: after bootstrap the app shows the Snowflake-generated IAM user ARN and external ID for both the external volume and the storage integration. Atlan adds these to the role's trust policy.
-4. Click **Verify Access** — it validates the external volume and lists the pointer files. If no pointer files are found, ask Atlan to enable the metadata pointer workflow for your tenant.
+4. Click **Verify Access** — it validates the external volume and lists the pointer files. If no pointer files are found, ask Atlan to enable the metadata pointer workflow for your tenant. Snowflake blocks the external volume check inside apps that run with owner's rights; if that happens, click **Verify in a Worksheet** and run the shown statement in a worksheet instead.
 5. On the **Sync** tab, run **Plan Sync** to see what will be created, then **Apply Plan**.
 6. On the **Scheduled Sync** tab, resume the task. It is created suspended so nothing runs before access is verified.
 

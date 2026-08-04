@@ -648,7 +648,10 @@ def render_trust_section(conn):
     trust.columns = ["Resource", "Snowflake IAM User ARN", "External ID"]
     st.table(trust.reset_index(drop=True))
 
-    if st.button("Verify Access", key="verify_btn"):
+    verify_sql = f"SELECT SYSTEM$VERIFY_EXTERNAL_VOLUME('{EXTERNAL_VOLUME}');"
+    col_app, col_manual = st.columns(2)
+
+    if col_app.button("Verify Access", key="verify_btn"):
         volume_ok, stage_ok = True, True
         try:
             row = conn.sql(
@@ -657,7 +660,18 @@ def render_trust_section(conn):
             st.text(f"External volume: {row[0]}")
         except Exception as e:
             volume_ok = False
-            st.error(f"External volume verification failed: {e}")
+            # Streamlit apps running with owner's rights execute inside a
+            # stored procedure, where Snowflake blocks side-effect system
+            # functions like SYSTEM$VERIFY_EXTERNAL_VOLUME (error 090237).
+            if "side effects" in str(e):
+                st.warning(
+                    "Snowflake does not allow the external volume check to "
+                    "run inside this app when it runs with owner's rights. "
+                    "Use **Verify in a Worksheet** to run it manually — the "
+                    "pointer stage check below is unaffected."
+                )
+            else:
+                st.error(f"External volume verification failed: {e}")
         try:
             files = conn.sql(f"LIST @{STAGE}/_latest/").collect()
             st.text(f"Pointer stage: found {len(files)} file(s) under _latest/")
@@ -672,6 +686,17 @@ def render_trust_section(conn):
             st.error(f"Pointer stage verification failed: {e}")
         if volume_ok and stage_ok:
             st.success("Access verified. You can run a sync from the Sync tab.")
+
+    if col_manual.button("Verify in a Worksheet", key="verify_manual_btn"):
+        st.session_state.show_manual_verify = True
+    if st.session_state.get("show_manual_verify"):
+        st.markdown(
+            "Run this in a Snowflake worksheet with the role that ran the "
+            "bootstrap. The JSON result should report success; a failure "
+            "means the IAM role's trust policy or permissions are not in "
+            "place yet."
+        )
+        st.code(verify_sql, language="sql")
 
 # ============================================================================
 # UI: Sync tab
