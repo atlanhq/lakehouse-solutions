@@ -355,11 +355,21 @@ Detailed schemas, conventions, and SQL templates are organized in the `reference
 | Wrong Catalog    | Ask the user for the catalog name from their Lakehouse connection details          |
 | Column Not Found (PyIceberg) | Polaris returns lowercase column names — use `timestamp` not `TIMESTAMP` |
 
-> **Storage credentials:** PyIceberg works with any Iceberg REST Catalog (IRC) regardless of the underlying storage (S3, Azure Storage, GCS). The Polaris catalog vends temporary storage credentials automatically — you do not need to configure cloud storage credentials separately.
+> **Storage credentials:** PyIceberg works with any Iceberg REST Catalog (IRC) regardless of the underlying storage (S3, Azure Storage, GCS). The Polaris catalog vends scoped, temporary storage credentials automatically — do not supply your own cloud credentials. They are not needed, and they will not have access to the tenant's bucket.
 
-### S3 Access Issues (PyIceberg only)
+### S3 scan failures (PyIceberg only)
 
-If you encounter S3 access errors when scanning tables, add AWS credentials to the catalog configuration:
+If `.scan()` fails on the table metadata with a message like:
+
+```
+OSError: When reading information for key '.../metadata/snap-*.avro' in bucket
+'atlan-vcluster-<tenant>-<hash>': AWS Error NETWORK_CONNECTION during HeadObject
+operation: curlCode: 28, Timeout was reached
+```
+
+this is a client-version problem, not a credentials problem. See the `pyiceberg` version note under [Python Dependencies](#python-dependencies): the pinned range avoids it entirely, and 0.10.0 needs no extra configuration.
+
+If you are stuck on 0.11.1, set the timeouts on the catalog so pyarrow can survive the bucket-region lookup that Polaris does not pre-populate:
 
 ```python
 catalog = load_catalog(
@@ -370,9 +380,15 @@ catalog = load_catalog(
     warehouse=creds["catalog_name"],
     scope=f"PRINCIPAL_ROLE:{creds['role']}",
     **{
-        "s3.access-key-id": os.environ["AWS_ACCESS_KEY_ID"],
-        "s3.secret-access-key": os.environ["AWS_SECRET_ACCESS_KEY"],
-        "s3.region": os.environ["AWS_REGION"],
-    }
+        "s3.connect-timeout": "30",   # required on 0.11.1
+        "s3.request-timeout": "120",  # required on 0.11.1
+        "s3.region": "us-east-1",     # optional; skips a slow region lookup
+    },
 )
+```
+
+To find the bucket region, take the bucket from `catalog.properties["default-base-location"]` and read it off the response header (a 403 still returns it):
+
+```bash
+curl -s -I "https://<bucket>.s3.amazonaws.com/" | grep -i x-amz-bucket-region
 ```
