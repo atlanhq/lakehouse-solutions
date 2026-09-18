@@ -6,11 +6,12 @@ This repository provides a collection of solutions for the Atlan Metadata Lakeho
 
 ## Supported Platforms
 
-- **Snowflake** ❄️
-- **Databricks** 🔷
-- **BigQuery** ☁️
-- **DuckDB** 🦆 *(coming soon)*
-- **Trino** 🚀 *(coming soon)*
+- **Snowflake**
+- **Databricks**
+- **BigQuery**
+- **Microsoft Fabric**
+- **DuckDB** *(coming soon)*
+- **Trino** *(coming soon)*
 
 ## Solutions
 
@@ -36,6 +37,10 @@ Snowflake supports native Iceberg REST Catalog federation, allowing you to query
 
 Databricks and BigQuery do not currently support querying federated Iceberg REST catalogs natively. These scripts provide a workaround by creating local table references (foreign Iceberg tables in Databricks Unity Catalog, external Iceberg tables in BigQuery) that point directly to the Atlan Lakehouse metadata files. The scripts handle both initial table creation and ongoing metadata refresh to keep tables in sync. Databricks supports both AWS S3 and Azure ADLS storage.
 
+### OneLake Iceberg Shortcuts *(Microsoft Fabric)*
+
+Fabric does not federate an Iceberg REST catalog. Instead, OneLake reads Iceberg tables directly from storage through shortcuts and virtualizes them as Delta Lake tables. This script creates those shortcuts against the Atlan-hosted ADLS Gen2 storage account, in a lakehouse in the customer's own Fabric tenant, mapping each Iceberg namespace to a lakehouse schema. It covers the one-time setup and a repeatable, per-namespace sync.
+
 ### AI Agent Skill
 
 An [Agent Skills](https://agentskills.io) skill that teaches AI coding agents (Claude Code, Cortex Code, Genie Code) how to connect to and query the lakehouse. Includes ~45 SQL templates covering metadata completeness, lineage analysis, glossary export, and usage analytics (active users, feature adoption, engagement, retention, health scoring). See [skills/atlan-lakehouse/](./skills/atlan-lakehouse/) for installation instructions.
@@ -59,6 +64,7 @@ Navigate to the platform-specific folder for available solutions and setup instr
 - [Snowflake](./snowflake/)
 - [Databricks](./databricks/)
 - [BigQuery](./bigquery/)
+- [Microsoft Fabric](./azure-fabric-onelake/)
 
 ## Use Cases
 
@@ -101,6 +107,11 @@ lakehouse-solutions/
 │   └── external-iceberg-tables/
 │       ├── README.md                      # External Iceberg Tables setup guide
 │       └── bq_external_iceberg_tables_create_refresh.py  # Create/refresh script
+├── azure-fabric-onelake/
+│   ├── README.md                          # Fabric solutions overview
+│   └── onelake-iceberg-shortcuts/
+│       ├── README.md                      # Shortcut sync setup guide
+│       └── fabric_onelake_shortcuts.py    # Setup + sync script
 ├── skills/
 │   └── atlan-lakehouse/
 │       ├── README.md                      # Installation & usage guide

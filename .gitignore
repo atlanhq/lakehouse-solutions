@@ -1,0 +1,16 @@
+# >>> atlan-builders >>>
+# Managed by atlan-core — edit inside this block and it will be preserved
+# only until the next bootstrap tick. Add your own rules outside the block.
+.atlan/journal/pending.jsonl
+.atlan/journal/.drafts/
+.atlan/cache/
+# <<< atlan-builders <<<
+
+__pycache__/
+
+# Local secrets. The scripts read environment variables, never a dotenv file.
+.env
+.env.*
+
+# Internal review artefacts from the atlan-builders plugins; not for the public repo.
+.atlan/
