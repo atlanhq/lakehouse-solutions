@@ -6,7 +6,7 @@ The GOLD namespace is a **curated, star-schema layer** designed for simplified a
 
 - **`ASSETS`** is the central hub table containing every catalog asset with common attributes
 - **Detail tables** branch out with domain-specific columns for particular asset categories
-- All tables use **`guid`** as the primary key for consistent joins
+- All tables use **`guid`** as the primary key for consistent joins (except `LINEAGE_ADJACENCY_LIST`, which is a directed edge list with no `guid` column)
 - Data syncs from the underlying `ENTITY_METADATA` namespace in real time
 
 ## ASSETS Table (Hub)
@@ -194,6 +194,15 @@ Data domain and data product attributes.
 | `data_domain` | GUID of the containing data domain |
 | `assets_dsl` | Search definition for asset inclusion |
 | `assets_playbook_filter` | Filtering logic for product assets |
+
+## LINEAGE_ADJACENCY_LIST
+
+Directed lineage edges between assets and processes. Each row is a single hop: `from_guid` is the upstream asset or process, `to_guid` is the downstream asset or process. The table has no `guid` column, so it does not join to `ASSETS` on the primary key. Join edges back to `ASSETS` on `from_guid` or `to_guid` instead.
+
+| Column | Description |
+|--------|-------------|
+| `from_guid` | GUID of the upstream asset or process in the edge |
+| `to_guid` | GUID of the downstream asset or process in the edge |
 
 ## Best Practices
 
